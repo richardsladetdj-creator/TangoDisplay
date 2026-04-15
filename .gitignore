@@ -1,0 +1,17 @@
+# Swift / SPM build artifacts
+.build/
+.swiftpm/
+*.xcodeproj
+*.xcworkspace
+
+# Built app bundle (release artifact, distributed via GitHub Releases)
+TangoDisplay.app/
+
+# macOS metadata
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Temp / editor
+*.swp
+*~

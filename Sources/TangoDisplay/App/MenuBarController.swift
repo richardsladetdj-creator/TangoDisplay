@@ -1,0 +1,69 @@
+import AppKit
+
+/// Manages the persistent menu bar status icon.
+/// Always visible regardless of window state, providing quick access to both windows.
+final class MenuBarController {
+
+    private let statusItem: NSStatusItem
+    private weak var appState: AppState?
+
+    init(appState: AppState) {
+        self.appState = appState
+        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        configure()
+    }
+
+    private func configure() {
+        guard let button = statusItem.button else { return }
+        let image = NSImage(systemSymbolName: "tv", accessibilityDescription: "TangoDisplay")
+        image?.isTemplate = true   // adapts to light/dark menu bar automatically
+        button.image = image
+        button.toolTip = "TangoDisplay"
+        statusItem.menu = buildMenu()
+    }
+
+    private func buildMenu() -> NSMenu {
+        let menu = NSMenu()
+
+        let showDisplay = NSMenuItem(
+            title: "Show Display Window",
+            action: #selector(showDisplayWindow),
+            keyEquivalent: ""
+        )
+        showDisplay.target = self
+        menu.addItem(showDisplay)
+
+        let showSettings = NSMenuItem(
+            title: "Show Settings Window",
+            action: #selector(showSettingsWindow),
+            keyEquivalent: ""
+        )
+        showSettings.target = self
+        menu.addItem(showSettings)
+
+        menu.addItem(.separator())
+
+        let quit = NSMenuItem(
+            title: "Quit TangoDisplay",
+            action: #selector(quitApp),
+            keyEquivalent: "q"
+        )
+        quit.target = self
+        menu.addItem(quit)
+
+        return menu
+    }
+
+    @objc private func showDisplayWindow() {
+        guard let appState else { return }
+        WindowManager.showPresentationWindow(appState: appState)
+    }
+
+    @objc private func showSettingsWindow() {
+        WindowManager.showControlWindow()
+    }
+
+    @objc private func quitApp() {
+        NSApp.terminate(nil)
+    }
+}

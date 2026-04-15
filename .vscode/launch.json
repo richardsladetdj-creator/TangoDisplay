@@ -1,0 +1,44 @@
+{
+    "configurations": [
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:TangoDisplay}",
+            "name": "Debug TangoDisplayTests",
+            "target": "TangoDisplayTests",
+            "configuration": "debug",
+            "preLaunchTask": "swift: Build Debug TangoDisplayTests"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:TangoDisplay}",
+            "name": "Release TangoDisplayTests",
+            "target": "TangoDisplayTests",
+            "configuration": "release",
+            "preLaunchTask": "swift: Build Release TangoDisplayTests"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:TangoDisplay}",
+            "name": "Debug TangoDisplay",
+            "target": "TangoDisplay",
+            "configuration": "debug",
+            "preLaunchTask": "swift: Build Debug TangoDisplay"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:TangoDisplay}",
+            "name": "Release TangoDisplay",
+            "target": "TangoDisplay",
+            "configuration": "release",
+            "preLaunchTask": "swift: Build Release TangoDisplay"
+        }
+    ]
+}

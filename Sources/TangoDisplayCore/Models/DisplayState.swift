@@ -1,0 +1,41 @@
+import Foundation
+
+public enum DisplayMode: Equatable, Hashable {
+    case playing
+    case cortina
+    case idle
+    case paused
+    case override
+}
+
+public struct TandaPosition: Equatable, Hashable {
+    public let current: Int
+    public let total: Int?   // nil when playlist scan unavailable
+
+    public init(current: Int, total: Int?) {
+        self.current = current
+        self.total = total
+    }
+}
+
+public struct DisplayState: Equatable, Hashable {
+    public var mode: DisplayMode = .idle
+    public var currentTrack: Track?
+    public var nextTrack: Track?           // non-nil in .cortina mode: first track of next tanda
+    public var tandaPosition: TandaPosition?
+    public var overrideText: String?
+
+    public init(
+        mode: DisplayMode = .idle,
+        currentTrack: Track? = nil,
+        nextTrack: Track? = nil,
+        tandaPosition: TandaPosition? = nil,
+        overrideText: String? = nil
+    ) {
+        self.mode = mode
+        self.currentTrack = currentTrack
+        self.nextTrack = nextTrack
+        self.tandaPosition = tandaPosition
+        self.overrideText = overrideText
+    }
+}

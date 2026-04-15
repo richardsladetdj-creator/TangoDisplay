@@ -1,0 +1,126 @@
+import Foundation
+import Combine
+import CoreGraphics
+import TangoDisplayCore
+
+private let kPrefix = "TangoDisplay."
+
+/// All user-configurable settings, persisted to UserDefaults.
+/// Arrays are stored as comma-joined strings to avoid UserDefaults type-registration issues.
+final class AppSettings: ObservableObject {
+
+    // MARK: - Display labels
+
+    @Published var cortinaLabel: String {
+        didSet { UserDefaults.standard.set(cortinaLabel, forKey: kPrefix + "cortinaLabel") }
+    }
+    @Published var nextUpLabel: String {
+        didSet { UserDefaults.standard.set(nextUpLabel, forKey: kPrefix + "nextUpLabel") }
+    }
+    @Published var idleMessage: String {
+        didSet { UserDefaults.standard.set(idleMessage, forKey: kPrefix + "idleMessage") }
+    }
+
+    // MARK: - Cortina rules
+
+    @Published var useAllowlist: Bool {
+        didSet { UserDefaults.standard.set(useAllowlist, forKey: kPrefix + "useAllowlist") }
+    }
+    @Published var allowlistGenres: [String] {
+        didSet { UserDefaults.standard.set(allowlistGenres.joined(separator: ","),
+                                           forKey: kPrefix + "allowlistGenres") }
+    }
+    @Published var useDenylist: Bool {
+        didSet { UserDefaults.standard.set(useDenylist, forKey: kPrefix + "useDenylist") }
+    }
+    @Published var denylistGenres: [String] {
+        didSet {
+            UserDefaults.standard.set(denylistGenres.joined(separator: ","),
+                                       forKey: kPrefix + "denylistGenres")
+            // Prune entries no longer in the denylist
+            denylistPartialMatchGenres = denylistPartialMatchGenres.filter {
+                denylistGenres.contains($0)
+            }
+        }
+    }
+    @Published var denylistPartialMatchGenres: Set<String> {
+        didSet {
+            UserDefaults.standard.set(
+                Array(denylistPartialMatchGenres).joined(separator: ","),
+                forKey: kPrefix + "denylistPartialMatchGenres"
+            )
+        }
+    }
+
+    // MARK: - Appearance / presentation
+
+    @Published var activeProfileID: UUID? {
+        didSet { UserDefaults.standard.set(activeProfileID?.uuidString,
+                                           forKey: kPrefix + "activeProfileID") }
+    }
+    @Published var targetDisplayID: CGDirectDisplayID? {
+        didSet { UserDefaults.standard.set(targetDisplayID.map { Int($0) },
+                                           forKey: kPrefix + "targetDisplayID") }
+    }
+    @Published var mirrorMode: Bool {
+        didSet { UserDefaults.standard.set(mirrorMode, forKey: kPrefix + "mirrorMode") }
+    }
+    @Published var showTrackCounter: Bool {
+        didSet { UserDefaults.standard.set(showTrackCounter, forKey: kPrefix + "showTrackCounter") }
+    }
+
+    // MARK: - Init
+
+    init() {
+        let ud = UserDefaults.standard
+        cortinaLabel  = ud.string(forKey: kPrefix + "cortinaLabel")  ?? "CORTINA"
+        nextUpLabel   = ud.string(forKey: kPrefix + "nextUpLabel")   ?? "COMING UP"
+        idleMessage   = ud.string(forKey: kPrefix + "idleMessage")   ?? ""
+        useAllowlist  = ud.object(forKey: kPrefix + "useAllowlist")
+                           .flatMap { $0 as? Bool } ?? true
+        allowlistGenres = AppSettings.parseGenres(
+            ud.string(forKey: kPrefix + "allowlistGenres"), default: ["Cortina"])
+        useDenylist   = ud.object(forKey: kPrefix + "useDenylist")
+                           .flatMap { $0 as? Bool } ?? true
+        denylistGenres = AppSettings.parseGenres(
+            ud.string(forKey: kPrefix + "denylistGenres"), default: ["Tango", "Vals", "Milonga"])
+        let rawPartial = ud.string(forKey: kPrefix + "denylistPartialMatchGenres")
+        if let rawPartial, !rawPartial.isEmpty {
+            denylistPartialMatchGenres = Set(AppSettings.parseGenres(rawPartial, default: []))
+        } else {
+            // First launch after update: enable partial match for all current denylist genres
+            denylistPartialMatchGenres = Set(AppSettings.parseGenres(
+                ud.string(forKey: kPrefix + "denylistGenres"), default: ["Tango", "Vals", "Milonga"]))
+        }
+        if let idString = ud.string(forKey: kPrefix + "activeProfileID") {
+            activeProfileID = UUID(uuidString: idString)
+        } else {
+            activeProfileID = AppearanceProfile.classic.id
+        }
+        if ud.object(forKey: kPrefix + "targetDisplayID") != nil {
+            let raw = ud.integer(forKey: kPrefix + "targetDisplayID")
+            targetDisplayID = CGDirectDisplayID(raw)
+        } else {
+            targetDisplayID = nil
+        }
+        mirrorMode = ud.object(forKey: kPrefix + "mirrorMode").flatMap { $0 as? Bool } ?? true
+        showTrackCounter = ud.object(forKey: kPrefix + "showTrackCounter").flatMap { $0 as? Bool } ?? true
+    }
+
+    // MARK: - Helpers
+
+    private static func parseGenres(_ raw: String?, default defaultValue: [String]) -> [String] {
+        guard let raw, !raw.isEmpty else { return defaultValue }
+        return raw.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+    }
+
+    func makeDetector() -> CortinaDetector {
+        CortinaDetector(
+            useAllowlist: useAllowlist,
+            allowlistGenres: Set(allowlistGenres.map { $0.lowercased() }),
+            useDenylist: useDenylist,
+            denylistGenres: Set(denylistGenres.map { $0.lowercased() }),
+            denylistPartialGenres: Set(denylistPartialMatchGenres.map { $0.lowercased() })
+        )
+    }
+}

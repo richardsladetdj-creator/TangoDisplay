@@ -1,0 +1,151 @@
+import SwiftUI
+
+struct CortinaSettingsView: View {
+    @EnvironmentObject var appState: AppState
+    @EnvironmentObject var settings: AppSettings
+    @State private var newAllowlistGenre = ""
+    @State private var newDenylistGenre = ""
+
+    var body: some View {
+        Form {
+            // Warning if both rules are off
+            if !settings.useAllowlist && !settings.useDenylist  {
+                Label("Both rules are disabled — nothing will be detected as a cortina.", systemImage: "exclamationmark.triangle.fill")
+                    .foregroundColor(.orange)
+                    .font(.subheadline)
+            }
+
+            Section {
+                Toggle("Allowlist rule", isOn: $settings.useAllowlist)
+                Text("A track is a cortina if its genre matches one of these genres:")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                genreListEditor(
+                    genres: $settings.allowlistGenres,
+                    newGenre: $newAllowlistGenre,
+                    placeholder: "e.g. Cortina"
+                )
+            } header: {
+                Text("Cortina Genres (allowlist)")
+                    .foregroundColor(ControlTheme.accent)
+            }
+
+            Section {
+                Toggle("Denylist rule", isOn: $settings.useDenylist)
+                Text("A track is a cortina if its genre is NOT in this list of dance genres:")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                denylistEditor()
+            } header: {
+                Text("Dance Genres (denylist)")
+                    .foregroundColor(ControlTheme.accent)
+            }
+
+            Section {
+                Text("When both rules are enabled, a track is a cortina if **either** rule matches.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                Text("Empty genre fields are treated as cortinas under the denylist rule.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            } header: {
+                Text("Notes")
+                    .foregroundColor(ControlTheme.accent)
+            }
+        }
+        .formStyle(.grouped)
+        .padding()
+    }
+
+    private func genreListEditor(
+        genres: Binding<[String]>,
+        newGenre: Binding<String>,
+        placeholder: String
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            ForEach(genres.wrappedValue.indices, id: \.self) { idx in
+                HStack {
+                    Text(genres.wrappedValue[idx])
+                        .font(.system(size: 13))
+                    Spacer()
+                    Button {
+                        genres.wrappedValue.remove(at: idx)
+                    } label: {
+                        Image(systemName: "trash")
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.horizontal, 6)
+                .padding(.vertical, 4)
+            }
+
+            HStack {
+                TextField(placeholder, text: newGenre)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.system(size: 13))
+                    .onSubmit { addGenre(genres: genres, newGenre: newGenre) }
+
+                Button("Add") { addGenre(genres: genres, newGenre: newGenre) }
+                    .buttonStyle(.bordered)
+                    .disabled(newGenre.wrappedValue.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+        }
+    }
+
+    private func addGenre(genres: Binding<[String]>, newGenre: Binding<String>) {
+        let trimmed = newGenre.wrappedValue.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty, !genres.wrappedValue.contains(trimmed) else { return }
+        genres.wrappedValue.append(trimmed)
+        newGenre.wrappedValue = ""
+    }
+
+    private func denylistEditor() -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            ForEach(settings.denylistGenres.indices, id: \.self) { idx in
+                let genre = settings.denylistGenres[idx]
+                HStack {
+                    Text(genre)
+                        .font(.system(size: 13))
+                    Spacer()
+                    Toggle("Partial match", isOn: Binding(
+                        get: { settings.denylistPartialMatchGenres.contains(genre) },
+                        set: { enabled in
+                            if enabled {
+                                settings.denylistPartialMatchGenres.insert(genre)
+                            } else {
+                                settings.denylistPartialMatchGenres.remove(genre)
+                            }
+                        }
+                    ))
+                    .toggleStyle(.checkbox)
+                    .help("Also matches genres starting with \"\(genre) \" (e.g. \"\(genre) Instrumental\")")
+                    Button {
+                        settings.denylistGenres.remove(at: idx)
+                    } label: {
+                        Image(systemName: "trash")
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.horizontal, 6)
+                .padding(.vertical, 4)
+            }
+            HStack {
+                TextField("e.g. Tango", text: $newDenylistGenre)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.system(size: 13))
+                    .onSubmit { addDenylistGenre() }
+                Button("Add") { addDenylistGenre() }
+                    .buttonStyle(.bordered)
+                    .disabled(newDenylistGenre.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+        }
+    }
+
+    private func addDenylistGenre() {
+        let trimmed = newDenylistGenre.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty, !settings.denylistGenres.contains(trimmed) else { return }
+        settings.denylistGenres.append(trimmed)
+        settings.denylistPartialMatchGenres.insert(trimmed)  // checked by default
+        newDenylistGenre = ""
+    }
+}
