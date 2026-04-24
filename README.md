@@ -19,7 +19,7 @@ A native macOS menu-bar app that shows a clean, fullscreen dancer display on an 
 - **Mirror mode** — live preview of the presentation window in the control window
 - **Display labels** — customisable "CORTINA", "COMING UP", and idle message text
 - **Idle message** — optional text shown when nothing is playing
-- **Player Source** — choose Music.app (default, full playlist lookahead and tanda counting), Swinsian, or Embrace (both use real-time notifications; playlist lookahead and "Coming Up" during cortinas are unavailable — tanda counting falls back to track history)
+- **Player Source** — choose Music.app (default, full playlist lookahead and tanda counting), Swinsian (real-time notifications; no lookahead — tanda counting from history), or Embrace (real-time notifications + next-track lookahead via AppleScript; "Coming Up" preview during cortinas is supported)
 
 ---
 
@@ -40,7 +40,7 @@ A native macOS menu-bar app that shows a clean, fullscreen dancer display on an 
 ### Option A — Download pre-built app (easiest)
 
 1. Go to the [Releases](https://github.com/richardsladetdj-creator/TangoDisplay/releases) page
-2. Download `TangoDisplay-v1.3.1.zip`
+2. Download `TangoDisplay-v1.4.0.zip`
 3. Unzip and drag `TangoDisplay.app` to your `/Applications` folder
 4. **Right-click › Open** on first launch (required because the app is ad-hoc signed, not notarised)
 5. Grant the permissions macOS requests (see [Permissions](#permissions) below)
@@ -126,6 +126,9 @@ Key design decisions:
 ---
 
 ## Changelog
+
+### v1.4.0
+- **New (Embrace):** Embrace now supports next-track look-ahead via AppleScript — the "Coming Up" upcoming tanda preview is shown during cortinas, matching Music.app behaviour. Full playlist enumeration is still unavailable (no setlist API), so tanda counting continues to use track history.
 
 ### v1.3.1
 - **Reliability:** Music.app now subscribes to the `com.apple.Music.playerInfo` DistributedNotification, triggering an immediate poll on every track and state change — mirroring how Embrace support works. This eliminates detection delays that could occur when the watchdog had backed off the polling interval due to transient AppleScript failures. The 2-second fallback polling and watchdog backoff are unchanged.

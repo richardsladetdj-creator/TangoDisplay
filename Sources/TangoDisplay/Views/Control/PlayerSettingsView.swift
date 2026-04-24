@@ -73,7 +73,15 @@ struct PlayerSettingsView: View {
                         .foregroundColor(.green)
                 }
                 Label {
-                    Text("Playlist look-ahead is unavailable — Embrace has no setlist API. Tanda counting uses track history only. During a cortina, upcoming tanda information will also be unavailable.")
+                    Text("Next-track look-ahead is available via AppleScript — upcoming tanda information is shown during a cortina.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                } icon: {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundColor(.green)
+                }
+                Label {
+                    Text("Full playlist enumeration is unavailable (no setlist API), so tanda counting uses track history only.")
                         .font(.caption)
                         .foregroundColor(.secondary)
                 } icon: {

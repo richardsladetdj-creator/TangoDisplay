@@ -34,20 +34,23 @@ final class EmbracMonitor {
 
     var onTrackUpdate: ((Track?, PlayerState) -> Void)?
     var onPlaylistUpdate: ((tracks: [Track], currentIndex: Int)?) -> Void = { _ in }
+    var onNextTrackUpdate: ((Track?) -> Void)?
     var onWatchdogChanged: ((Bool) -> Void)?
 
     // MARK: - AppleScript source
 
-    /// Returns five newline-delimited fields: state, title, artist, genre, id.
-    /// Uses current index + track N lookup (Embrace uses 1-based indexing; 0 = no track loaded).
-    /// Uses `player state as string` because Embrace's dictionary does not export `paused`
-    /// as a named constant — comparing `player state is paused` throws -2753 at runtime.
+    /// Returns nine newline-delimited fields: state, title, artist, genre, id,
+    /// nextTitle, nextArtist, nextGenre, nextID. Next-track fields are empty strings
+    /// when there is no following track. Uses current index + track N lookup (Embrace
+    /// uses 1-based indexing; 0 = no track loaded). Uses `player state as string`
+    /// because Embrace's dictionary does not export `paused` as a named constant —
+    /// comparing `player state is paused` throws -2753 at runtime.
     private static let trackScript = """
         tell application "Embrace"
             try
                 set idx to current index
                 if idx is 0 then
-                    return "stopped" & linefeed & "" & linefeed & "" & linefeed & "" & linefeed & ""
+                    return "stopped" & linefeed & "" & linefeed & "" & linefeed & "" & linefeed & "" & linefeed & "" & linefeed & "" & linefeed & "" & linefeed & ""
                 end if
                 set t to track idx
                 set theTitle to title of t
@@ -58,11 +61,27 @@ final class EmbracMonitor {
                 set theID to id of t
                 set stateStr to player state as string
                 if stateStr is "stopped" then
-                    return "stopped" & linefeed & "" & linefeed & "" & linefeed & "" & linefeed & ""
+                    return "stopped" & linefeed & "" & linefeed & "" & linefeed & "" & linefeed & "" & linefeed & "" & linefeed & "" & linefeed & "" & linefeed & ""
                 end if
-                return stateStr & linefeed & theTitle & linefeed & theArtist & linefeed & theGenre & linefeed & theID
+                set totalTracks to count of tracks
+                set nextTitle to ""
+                set nextArtist to ""
+                set nextGenre to ""
+                set nextID to ""
+                if idx < totalTracks then
+                    try
+                        set nt to track (idx + 1)
+                        set nextTitle to title of nt
+                        set nextArtist to artist of nt
+                        if nextArtist is missing value then set nextArtist to ""
+                        set nextGenre to genre of nt
+                        if nextGenre is missing value then set nextGenre to ""
+                        set nextID to id of nt
+                    end try
+                end if
+                return stateStr & linefeed & theTitle & linefeed & theArtist & linefeed & theGenre & linefeed & theID & linefeed & nextTitle & linefeed & nextArtist & linefeed & nextGenre & linefeed & nextID
             on error
-                return "stopped" & linefeed & "" & linefeed & "" & linefeed & "" & linefeed & ""
+                return "stopped" & linefeed & "" & linefeed & "" & linefeed & "" & linefeed & "" & linefeed & "" & linefeed & "" & linefeed & "" & linefeed & ""
             end try
         end tell
         """
@@ -120,11 +139,15 @@ final class EmbracMonitor {
             handleSuccess()
             let result = parseOutput(output)
             DispatchQueue.main.async { [weak self] in
-                self?.onTrackUpdate?(result.0, result.1)
+                // Fire next-track first so AppState.lastKnownNextTrack is set
+                // before handleCortinaTrack reads it via onTrackUpdate.
+                self?.onNextTrackUpdate?(result.1)
+                self?.onTrackUpdate?(result.0, result.2)
             }
         } else {
             handleFailure()
             DispatchQueue.main.async { [weak self] in
+                self?.onNextTrackUpdate?(nil)
                 self?.onTrackUpdate?(nil, .stopped)
             }
         }
@@ -168,24 +191,36 @@ final class EmbracMonitor {
 
     // MARK: - Output parsing
 
-    /// Parses five newline-delimited fields: state, title, artist, genre, id.
-    private func parseOutput(_ output: String) -> (Track?, PlayerState) {
+    /// Parses nine newline-delimited fields: state, title, artist, genre, id,
+    /// nextTitle, nextArtist, nextGenre, nextID.
+    /// Returns (currentTrack, nextTrack, playerState).
+    private func parseOutput(_ output: String) -> (Track?, Track?, PlayerState) {
         // osascript appends a trailing newline; split keeping empty strings to preserve indices
         let lines = output.components(separatedBy: "\n")
 
         let stateRaw = lines.count > 0 ? lines[0].trimmingCharacters(in: .whitespaces) : "stopped"
         let state    = PlayerState(rawValue: stateRaw) ?? .stopped
 
-        guard state != .stopped else { return (nil, .stopped) }
+        guard state != .stopped else { return (nil, nil, .stopped) }
 
         let title  = lines.count > 1 ? lines[1] : ""
         let artist = lines.count > 2 ? lines[2] : ""
         let genre  = lines.count > 3 ? lines[3] : ""
         let pid    = lines.count > 4 ? lines[4].trimmingCharacters(in: .whitespaces) : ""
 
-        guard !pid.isEmpty || !title.isEmpty else { return (nil, .stopped) }
+        guard !pid.isEmpty || !title.isEmpty else { return (nil, nil, .stopped) }
 
-        return (Track(title: title, artist: artist, genre: genre, persistentID: pid), state)
+        let currentTrack = Track(title: title, artist: artist, genre: genre, persistentID: pid)
+
+        let nextTitle  = lines.count > 5 ? lines[5] : ""
+        let nextArtist = lines.count > 6 ? lines[6] : ""
+        let nextGenre  = lines.count > 7 ? lines[7] : ""
+        let nextID     = lines.count > 8 ? lines[8].trimmingCharacters(in: .whitespaces) : ""
+
+        let nextTrack: Track? = nextID.isEmpty && nextTitle.isEmpty ? nil :
+            Track(title: nextTitle, artist: nextArtist, genre: nextGenre, persistentID: nextID)
+
+        return (currentTrack, nextTrack, state)
     }
 
     // MARK: - Watchdog

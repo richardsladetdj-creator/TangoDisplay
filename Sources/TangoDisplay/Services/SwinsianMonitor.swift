@@ -19,6 +19,7 @@ final class SwinsianMonitor {
 
     var onTrackUpdate: ((Track?, PlayerState) -> Void)?
     var onPlaylistUpdate: ((tracks: [Track], currentIndex: Int)?) -> Void = { _ in }
+    var onNextTrackUpdate: ((Track?) -> Void)? = nil
     var onWatchdogChanged: ((Bool) -> Void)?
 
     private var observers: [AnyObject] = []

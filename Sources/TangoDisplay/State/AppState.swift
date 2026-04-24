@@ -35,6 +35,7 @@ final class AppState: ObservableObject {
     private var trackHistory: [Track] = []           // cleared on each cortina/idle
     private var playlistTracks: [Track]? = nil       // last known playlist; nil = unavailable
     private var playlistCurrentIndex: Int = 0        // 0-based
+    private var lastKnownNextTrack: Track? = nil     // from onNextTrackUpdate; used for Embrace cortina look-ahead
     private var lastSeenPersistentID: String = ""
     @Published private(set) var currentPlayerState: PlayerState = .stopped
     private var isPausedByUser = false               // ⌘⇧P toggle
@@ -85,6 +86,17 @@ final class AppState: ObservableObject {
         source.onPlaylistUpdate = { [weak self] context in
             self?.handlePlaylistUpdate(context)
         }
+        source.onNextTrackUpdate = { [weak self] nextTrack in
+            guard let self else { return }
+            self.lastKnownNextTrack = nextTrack
+            if self.displayState.mode == .cortina {
+                let detector = self.settings.makeDetector()
+                let validNext = nextTrack.flatMap { detector.isCortina(genre: $0.genre) ? nil : $0 }
+                if self.displayState.nextTrack != validNext {
+                    self.displayState.nextTrack = validNext
+                }
+            }
+        }
         source.onWatchdogChanged = { [weak self] active in
             self?.watchdogActive = active
             let name = self?.settings.selectedPlayer.displayName ?? "Player"
@@ -121,6 +133,7 @@ final class AppState: ObservableObject {
         isPausedByUser = false
         pendingStateBeforePause = nil
         watchdogActive = false
+        lastKnownNextTrack = nil
         displayState = DisplayState()
     }
 
@@ -204,8 +217,11 @@ final class AppState: ObservableObject {
         // handlePlaylistUpdate will update or clear nextTrack when the result arrives.
         activeSource.triggerPlaylistFetch()
 
-        // Find the next non-cortina track (first track of next tanda) from playlist
+        // Find the next non-cortina track (first track of next tanda).
+        // For Music.app this uses the full playlist; for Embrace it falls back to
+        // lastKnownNextTrack (already set by onNextTrackUpdate before this runs).
         let nextTrack = findNextDanceTrack(after: playlistCurrentIndex, detector: detector)
+            ?? lastKnownNextTrack.flatMap { detector.isCortina(genre: $0.genre) ? nil : $0 }
         trackHistory.removeAll()
         displayState = DisplayState(
             mode: .cortina,

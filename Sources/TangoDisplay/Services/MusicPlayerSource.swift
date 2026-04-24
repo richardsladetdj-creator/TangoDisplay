@@ -26,6 +26,9 @@ enum MusicPlayerChoice: String, CaseIterable, Identifiable {
 protocol MusicPlayerSource: AnyObject {
     var onTrackUpdate: ((Track?, PlayerState) -> Void)? { get set }
     var onPlaylistUpdate: ((tracks: [Track], currentIndex: Int)?) -> Void { get set }
+    /// Delivers the track immediately following the current one, or nil when unavailable.
+    /// Fired before onTrackUpdate each poll so callers can use it during cortina transitions.
+    var onNextTrackUpdate: ((Track?) -> Void)? { get set }
     var onWatchdogChanged: ((Bool) -> Void)? { get set }
     func start()
     func stop()
