@@ -6,12 +6,19 @@ import TangoDisplayCore
 /// Uses a DispatchSourceTimer rescheduled after each poll (not a repeating timer)
 /// so slow AppleScript calls never queue up.
 ///
+/// Also subscribes to `com.apple.Music.playerInfo` via DistributedNotificationCenter
+/// to trigger an immediate poll on track/state changes, mirroring EmbracMonitor's
+/// push+poll strategy. The 2-second fallback polling and watchdog backoff are unchanged.
+///
 /// Watchdog: 3 consecutive failures → enter backoff mode (2→4→8…→30s).
 /// Recovery: first success after watchdog → reset to 2s.
 final class MusicPoller {
 
     private let bridge = AppleScriptBridge()
     private let timerQueue = DispatchQueue(label: "com.tangodisplay.pollertimer", qos: .utility)
+
+    private static let updateNotification = "com.apple.Music.playerInfo"
+    private var notificationObserver: AnyObject?
 
     private var timer: DispatchSourceTimer?
     private var pollCount = 0
@@ -32,12 +39,26 @@ final class MusicPoller {
 
     func start() {
         bridge.compile()
+
+        let observer = DistributedNotificationCenter.default().addObserver(
+            forName: NSNotification.Name(Self.updateNotification),
+            object: nil,
+            queue: nil   // delivered on whatever thread DNC chooses; we dispatch to timerQueue
+        ) { [weak self] _ in
+            self?.notificationTriggeredPoll()
+        }
+        notificationObserver = observer
+
         schedulePoll(after: normalInterval)
     }
 
     func stop() {
         timer?.cancel()
         timer = nil
+        if let observer = notificationObserver {
+            DistributedNotificationCenter.default().removeObserver(observer)
+            notificationObserver = nil
+        }
     }
 
     /// Trigger an immediate poll (e.g. from ⌘⇧R hotkey).
@@ -60,6 +81,15 @@ final class MusicPoller {
     }
 
     // MARK: - Internal scheduling
+
+    private func notificationTriggeredPoll() {
+        timerQueue.async { [weak self] in
+            guard let self else { return }
+            self.timer?.cancel()
+            self.timer = nil
+            self.doPoll()
+        }
+    }
 
     private func schedulePoll(after interval: TimeInterval) {
         let t = DispatchSource.makeTimerSource(queue: timerQueue)
