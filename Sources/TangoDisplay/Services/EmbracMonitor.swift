@@ -12,9 +12,10 @@ import TangoDisplayCore
 /// NSAppleScript to avoid per-call compilation overhead; TCC attributes the
 /// subprocess's Apple Events to the parent app (TangoDisplay).
 ///
-/// Playlist enumeration is not supported — triggerPlaylistFetch() is a no-op and
-/// onPlaylistUpdate is never called. AppState's history-based tanda counting
-/// fallback handles this automatically (same behaviour as SwinsianMonitor).
+/// Full setlist enumeration is supported via the `tracks` noun of the Embrace
+/// application, which returns the current setlist in order. triggerPlaylistFetch()
+/// dispatches a playlist script run on demand; doPoll() also refreshes the playlist
+/// every playlistRefreshInterval polls for robustness.
 final class EmbracMonitor {
 
     private static let updateNotification = "com.iccir.Embrace.playerUpdate"
@@ -29,6 +30,9 @@ final class EmbracMonitor {
     private let normalInterval: TimeInterval = 2.0
     private let maxInterval: TimeInterval = 30.0
     private let failuresBeforeWatchdog = 3
+
+    private var pollCount = 0
+    private let playlistRefreshInterval = 10   // refresh playlist every ~20s at 2s poll rate
 
     // MARK: - MusicPlayerSource callbacks (all delivered on main queue)
 
@@ -86,6 +90,36 @@ final class EmbracMonitor {
         end tell
         """
 
+    /// Returns the full setlist as newline-delimited text.
+    /// Line 0: current index (1-based), or "0" on stopped/error.
+    /// Lines 1…N: four lines per track — title, artist, genre, id.
+    private static let playlistScript = """
+        tell application "Embrace"
+            try
+                set stateStr to player state as string
+                if stateStr is "stopped" then
+                    return "0"
+                end if
+                set idx to current index
+                if idx is 0 then return "0"
+                set allTracks to tracks
+                set output to idx as string
+                repeat with t in allTracks
+                    set theTitle to title of t
+                    set theArtist to artist of t
+                    if theArtist is missing value then set theArtist to ""
+                    set theGenre to genre of t
+                    if theGenre is missing value then set theGenre to ""
+                    set theID to id of t
+                    set output to output & linefeed & theTitle & linefeed & theArtist & linefeed & theGenre & linefeed & theID
+                end repeat
+                return output
+            on error
+                return "0"
+            end try
+        end tell
+        """
+
     // MARK: - Lifecycle
 
     func start() {
@@ -137,6 +171,10 @@ final class EmbracMonitor {
         // Must be called on scriptQueue
         if let output = runScript() {
             handleSuccess()
+            pollCount += 1
+            if pollCount % playlistRefreshInterval == 0 {
+                doPlaylistFetch()
+            }
             let result = parseOutput(output)
             DispatchQueue.main.async { [weak self] in
                 // Fire next-track first so AppState.lastKnownNextTrack is set
@@ -154,14 +192,62 @@ final class EmbracMonitor {
         schedulePoll(after: currentInterval)
     }
 
+    // MARK: - Playlist fetch
+
+    private func doPlaylistFetch() {
+        guard let output = runPlaylistScript() else { return }
+        let result = parsePlaylistOutput(output)
+        DispatchQueue.main.async { [weak self] in
+            self?.onPlaylistUpdate(result)
+        }
+    }
+
+    private func runPlaylistScript() -> String? {
+        runOsascript(Self.playlistScript)
+    }
+
+    private func parsePlaylistOutput(_ output: String) -> (tracks: [Track], currentIndex: Int)? {
+        var lines = output.components(separatedBy: "\n")
+        if lines.last?.isEmpty == true { lines.removeLast() }
+
+        guard let firstLine = lines.first,
+              let currentIndex = Int(firstLine.trimmingCharacters(in: .whitespaces)),
+              currentIndex > 0 else { return nil }
+
+        let trackLines = Array(lines.dropFirst())
+        let trackCount = trackLines.count / 4
+        guard trackCount > 0 else { return nil }
+
+        var tracks: [Track] = []
+        tracks.reserveCapacity(trackCount)
+        for i in 0..<trackCount {
+            let base = i * 4
+            guard base + 3 < trackLines.count else { break }
+            let pid = trackLines[base + 3].trimmingCharacters(in: .whitespaces)
+            tracks.append(Track(
+                title:       trackLines[base],
+                artist:      trackLines[base + 1],
+                genre:       trackLines[base + 2],
+                persistentID: pid
+            ))
+        }
+
+        guard currentIndex <= tracks.count else { return nil }
+        return (tracks: tracks, currentIndex: currentIndex - 1)
+    }
+
     // MARK: - Script execution
 
     /// Runs the AppleScript via /usr/bin/osascript and returns stdout, or nil on failure.
     /// Must be called on scriptQueue (it blocks until the subprocess exits).
     private func runScript() -> String? {
+        runOsascript(Self.trackScript)
+    }
+
+    private func runOsascript(_ script: String) -> String? {
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
-        proc.arguments = ["-e", Self.trackScript]
+        proc.arguments = ["-e", script]
 
         let stdoutPipe = Pipe()
         let stderrPipe = Pipe()
@@ -257,5 +343,7 @@ extension EmbracMonitor: MusicPlayerSource {
         }
     }
 
-    func triggerPlaylistFetch() {}   // no Embrace setlist API
+    func triggerPlaylistFetch() {
+        scriptQueue.async { [weak self] in self?.doPlaylistFetch() }
+    }
 }

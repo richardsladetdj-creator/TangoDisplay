@@ -19,7 +19,7 @@ A native macOS menu-bar app that shows a clean, fullscreen dancer display on an 
 - **Mirror mode** — live preview of the presentation window in the control window
 - **Display labels** — customisable "CORTINA", "COMING UP", and idle message text
 - **Idle message** — optional text shown when nothing is playing
-- **Player Source** — choose Music.app (default, full playlist lookahead and tanda counting), Swinsian (real-time notifications; no lookahead — tanda counting from history), or Embrace (real-time notifications + next-track lookahead via AppleScript; "Coming Up" preview during cortinas is supported)
+- **Player Source** — choose Music.app (default), Swinsian (real-time notifications; no lookahead), or Embrace (full playlist lookahead and tanda counting via AppleScript — full parity with Music.app as of v1.5.0)
 
 ---
 
@@ -40,7 +40,7 @@ A native macOS menu-bar app that shows a clean, fullscreen dancer display on an 
 ### Option A — Download pre-built app (easiest)
 
 1. Go to the [Releases](https://github.com/richardsladetdj-creator/TangoDisplay/releases) page
-2. Download `TangoDisplay-v1.4.0.zip`
+2. Download `TangoDisplay-v1.5.0.zip`
 3. Unzip and drag `TangoDisplay.app` to your `/Applications` folder
 4. **Right-click › Open** on first launch (required because the app is ad-hoc signed, not notarised)
 5. Grant the permissions macOS requests (see [Permissions](#permissions) below)
@@ -127,8 +127,11 @@ Key design decisions:
 
 ## Changelog
 
+### v1.5.0
+- **Embrace — full Music.app parity:** Embrace now enumerates the full setlist via AppleScript, bringing it to full parity with Music.app. Tanda totals (e.g. Track 2 of 4) are now read directly from the playlist, and the "Coming Up" cortina preview correctly skips any queued cortinas to show the first dance track of the next tanda.
+
 ### v1.4.0
-- **New (Embrace):** Embrace now supports next-track look-ahead via AppleScript — the "Coming Up" upcoming tanda preview is shown during cortinas, matching Music.app behaviour. Full playlist enumeration is still unavailable (no setlist API), so tanda counting continues to use track history.
+- **New (Embrace):** Embrace now supports next-track look-ahead via AppleScript — the "Coming Up" upcoming tanda preview is shown during cortinas.
 
 ### v1.3.1
 - **Reliability:** Music.app now subscribes to the `com.apple.Music.playerInfo` DistributedNotification, triggering an immediate poll on every track and state change — mirroring how Embrace support works. This eliminates detection delays that could occur when the watchdog had backed off the polling interval due to transient AppleScript failures. The 2-second fallback polling and watchdog backoff are unchanged.

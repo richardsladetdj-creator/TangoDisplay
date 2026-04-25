@@ -63,31 +63,13 @@ struct PlayerSettingsView: View {
             }
 
         case .embrace:
-            VStack(alignment: .leading, spacing: 8) {
-                Label {
-                    Text("Listens for Embrace notifications and polls via AppleScript in real time.")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                } icon: {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundColor(.green)
-                }
-                Label {
-                    Text("Next-track look-ahead is available via AppleScript — upcoming tanda information is shown during a cortina.")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                } icon: {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundColor(.green)
-                }
-                Label {
-                    Text("Full playlist enumeration is unavailable (no setlist API), so tanda counting uses track history only.")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                } icon: {
-                    Image(systemName: "info.circle")
-                        .foregroundColor(.secondary)
-                }
+            Label {
+                Text("Listens for Embrace notifications and polls via AppleScript in real time. Playlist look-ahead and tanda counting are fully supported.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            } icon: {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundColor(.green)
             }
         }
     }
