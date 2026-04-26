@@ -6,7 +6,7 @@ The **Appearance** tab controls everything about how the dancer display looks �
 
 ## Transition
 
-![Appearance — transitions and colors](https://raw.githubusercontent.com/richardsladetdj-creator/TangoDisplay/main/docs/screenshots/appearance-colors.png)
+![Appearance — transitions and colors](https://raw.githubusercontent.com/richardsladetdj-creator/TangoDisplay/main/docs/screenshots/appearance-colors-v160.png)
 
 | Setting | Description |
 |---|---|
@@ -34,7 +34,7 @@ Click any color swatch to open the macOS color picker.
 
 ## Background Image
 
-![Appearance — background image and fonts](https://raw.githubusercontent.com/richardsladetdj-creator/TangoDisplay/main/docs/screenshots/appearance-fonts.png)
+![Appearance — background image and fonts](https://raw.githubusercontent.com/richardsladetdj-creator/TangoDisplay/main/docs/screenshots/appearance-fonts-v160.png)
 
 | Control | Description |
 |---|---|
