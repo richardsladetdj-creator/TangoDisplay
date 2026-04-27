@@ -31,6 +31,7 @@ final class AppState: ObservableObject {
 
     let settings = AppSettings()
     let profileStore = ProfileStore()
+    let versionChecker = VersionChecker()
     private var activeSource: any MusicPlayerSource = MusicPoller()  // replaced in start()
     private var cancellables = Set<AnyCancellable>()
 
@@ -69,6 +70,7 @@ final class AppState: ObservableObject {
         activeSource = AppState.makeSource(for: settings.selectedPlayer)
         wireCallbacks(to: activeSource)
         activeSource.start()
+        versionChecker.startPeriodicChecks()
     }
 
     func pollNow() {

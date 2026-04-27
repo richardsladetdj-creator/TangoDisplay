@@ -21,6 +21,7 @@ A native macOS menu-bar app that shows a clean, fullscreen dancer display on an 
 - **Idle message** — optional text shown when nothing is playing
 - **Album Artwork** — display the current track's artwork on the dancer screen; configurable opacity, scale, and position. Supported for Music.app, Swinsian, and Embrace.
 - **Player Source** — choose Music.app (default), Swinsian (real-time notifications; no lookahead), or Embrace (full playlist lookahead and tanda counting via AppleScript — full parity with Music.app as of v1.5.0)
+- **Update indicator** — a small dot in the sidebar shows when a newer release is available; click to open the releases page
 
 ---
 
@@ -41,7 +42,7 @@ A native macOS menu-bar app that shows a clean, fullscreen dancer display on an 
 ### Option A — Download pre-built app (easiest)
 
 1. Go to the [Releases](https://github.com/richardsladetdj-creator/TangoDisplay/releases) page
-2. Download `TangoDisplay-v1.7.0.zip`
+2. Download `TangoDisplay-v1.8.0.zip`
 3. Unzip and drag `TangoDisplay.app` to your `/Applications` folder
 4. **Right-click › Open** on first launch (required because the app is ad-hoc signed, not notarised)
 5. Grant the permissions macOS requests (see [Permissions](#permissions) below)
@@ -127,6 +128,9 @@ Key design decisions:
 ---
 
 ## Changelog
+
+### v1.8.0
+- **New:** Update indicator in the sidebar. A small dot in the bottom-left corner of the sidebar shows your current version. It stays green when you're up to date, and turns red with a clickable link to the latest release when a newer version is available on GitHub. The check runs silently on launch and every hour; no action is taken if the device is offline.
 
 ### v1.7.0
 - **New:** Album artwork is now shown on the dancer screen. Enable **Display album artwork** in the Appearance tab. Artwork is fetched from the current track for all three player sources (Music.app, Swinsian, and Embrace). Four controls — **Opacity**, **Scale**, **Horizontal offset**, and **Vertical offset** — let you position and blend it exactly as you want. Artwork fades in and out with track transitions.

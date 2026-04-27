@@ -132,6 +132,12 @@ struct ControlView: View {
         }
         .listStyle(.sidebar)
         .navigationSplitViewColumnWidth(min: 160, ideal: 180, max: 220)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            VersionBadgeView()
+                .environmentObject(appState.versionChecker)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+        }
     }
 
     private func sidebarRow(_ item: SidebarItem) -> some View {
