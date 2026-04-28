@@ -175,6 +175,7 @@ struct AppearanceSettingsView: View {
                 if working.showSinger {
                     fontRow("Singer", name: $working.singerFontName, size: $working.singerFontSize,
                             bold: $working.singerFontBold, italic: $working.singerFontItalic)
+                    Toggle("Show singer during cortina", isOn: $working.showSingerDuringCortina)
                 }
             } header: {
                 Text("Fonts")

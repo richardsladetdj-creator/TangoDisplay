@@ -49,6 +49,7 @@ public struct AppearanceProfile: Codable, Identifiable, Equatable {
 
     // Singer line (displays track comment field below the title)
     public var showSinger: Bool
+    public var showSingerDuringCortina: Bool
     public var singerFontName: String
     public var singerFontSize: Double
     public var singerFontBold: Bool
@@ -84,6 +85,7 @@ public struct AppearanceProfile: Codable, Identifiable, Equatable {
                 albumArtworkOffsetX: Double = 0.0,
                 albumArtworkOffsetY: Double = 0.0,
                 showSinger: Bool = false,
+                showSingerDuringCortina: Bool = false,
                 singerFontName: String = "System",
                 singerFontSize: Double = 48,
                 singerFontBold: Bool = false,
@@ -128,6 +130,7 @@ public struct AppearanceProfile: Codable, Identifiable, Equatable {
         self.albumArtworkOffsetX = albumArtworkOffsetX
         self.albumArtworkOffsetY = albumArtworkOffsetY
         self.showSinger = showSinger
+        self.showSingerDuringCortina = showSingerDuringCortina
         self.singerFontName = singerFontName
         self.singerFontSize = singerFontSize
         self.singerFontBold = singerFontBold
@@ -178,6 +181,7 @@ public struct AppearanceProfile: Codable, Identifiable, Equatable {
         albumArtworkOffsetX     = try c.decodeIfPresent(Double.self,  forKey: .albumArtworkOffsetX)     ?? 0.0
         albumArtworkOffsetY     = try c.decodeIfPresent(Double.self,  forKey: .albumArtworkOffsetY)     ?? 0.0
         showSinger              = try c.decodeIfPresent(Bool.self,    forKey: .showSinger)              ?? false
+        showSingerDuringCortina = try c.decodeIfPresent(Bool.self,    forKey: .showSingerDuringCortina) ?? false
         singerFontName          = try c.decodeIfPresent(String.self,  forKey: .singerFontName)          ?? "System"
         singerFontSize          = try c.decodeIfPresent(Double.self,  forKey: .singerFontSize)          ?? 48
         singerFontBold          = try c.decodeIfPresent(Bool.self,    forKey: .singerFontBold)          ?? false

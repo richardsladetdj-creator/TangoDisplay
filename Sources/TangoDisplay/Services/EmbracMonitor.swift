@@ -124,7 +124,9 @@ final class EmbracMonitor {
                     set theID to id of t
                     set theYear to year of t
                     if theYear is missing value then set theYear to 0
-                    set output to output & linefeed & theTitle & linefeed & theArtist & linefeed & theGenre & linefeed & theID & linefeed & theYear
+                    set theComment to comment of t
+                    if theComment is missing value then set theComment to ""
+                    set output to output & linefeed & theTitle & linefeed & theArtist & linefeed & theGenre & linefeed & theID & linefeed & theYear & linefeed & theComment
                 end repeat
                 return output
             on error
@@ -228,22 +230,25 @@ final class EmbracMonitor {
               currentIndex > 0 else { return nil }
 
         let trackLines = Array(lines.dropFirst())
-        let trackCount = trackLines.count / 5
+        let trackCount = trackLines.count / 6
         guard trackCount > 0 else { return nil }
 
         var tracks: [Track] = []
         tracks.reserveCapacity(trackCount)
         for i in 0..<trackCount {
-            let base = i * 5
-            guard base + 4 < trackLines.count else { break }
-            let pid     = trackLines[base + 3].trimmingCharacters(in: .whitespaces)
-            let yearRaw = Int(trackLines[base + 4].trimmingCharacters(in: .whitespaces)) ?? 0
+            let base = i * 6
+            guard base + 5 < trackLines.count else { break }
+            let pid        = trackLines[base + 3].trimmingCharacters(in: .whitespaces)
+            let yearRaw    = Int(trackLines[base + 4].trimmingCharacters(in: .whitespaces)) ?? 0
+            let commentRaw = trackLines[base + 5]
+            let comment    = commentRaw.isEmpty ? nil : commentRaw
             tracks.append(Track(
                 title:        trackLines[base],
                 artist:       trackLines[base + 1],
                 genre:        trackLines[base + 2],
                 persistentID: pid,
-                year:         yearRaw > 0 ? yearRaw : nil
+                year:         yearRaw > 0 ? yearRaw : nil,
+                comment:      comment
             ))
         }
 

@@ -45,7 +45,7 @@ struct PlayerSettingsView: View {
         case .swinsian:
             VStack(alignment: .leading, spacing: 8) {
                 Label {
-                    Text("Listens for Swinsian push notifications in real time.")
+                    Text("Listens for Swinsian push notifications in real time. Upcoming tanda look-ahead is supported when playing from a queue or playlist.")
                         .font(.caption)
                         .foregroundColor(.secondary)
                 } icon: {
@@ -53,7 +53,7 @@ struct PlayerSettingsView: View {
                         .foregroundColor(.green)
                 }
                 Label {
-                    Text("Playlist look-ahead is unavailable — Swinsian has no playlist API. Tanda counting uses track history only. During a cortina, upcoming tanda information will also be unavailable.")
+                    Text("Tanda position counting (track 1 of 4) uses track history only — Swinsian's queue starts at the current track so backwards context is unavailable.")
                         .font(.caption)
                         .foregroundColor(.secondary)
                 } icon: {

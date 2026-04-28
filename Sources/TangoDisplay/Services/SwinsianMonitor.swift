@@ -7,9 +7,11 @@ import TangoDisplayCore
 /// All observer blocks are registered to deliver on OperationQueue.main,
 /// matching MusicPoller's contract that callbacks arrive on the main queue.
 ///
-/// Playlist enumeration is unavailable in Swinsian's API; triggerPlaylistFetch()
-/// is a no-op and onPlaylistUpdate is never called. AppState's history-based
-/// tanda counting fallback handles this automatically.
+/// Playlist enumeration is unavailable, but look-ahead is supported via
+/// Swinsian's `playback queue` AppleScript property. triggerPlaylistFetch()
+/// fetches queue[2] (the track after current) and delivers it via onNextTrackUpdate.
+/// Tanda position counting uses the history-based fallback (no backward-looking context
+/// is available from a queue that starts at the current track).
 final class SwinsianMonitor {
 
     private static let notifyPlaying = "com.swinsian.Swinsian-Track-Playing"
@@ -46,6 +48,26 @@ final class SwinsianMonitor {
                     if c is missing value then return ""
                     return c
                 end if
+            end try
+            return ""
+        end tell
+        """
+
+    // Returns field-separated data for the second track in the playback queue (the
+    // track that will play after the current one), or empty string if the queue has
+    // fewer than two tracks. Fields: name, artist, genre, id, year, comment.
+    private static let nextQueueTrackScript = """
+        tell application "Swinsian"
+            try
+                tell playback queue
+                    if (count of tracks) < 2 then return ""
+                    set t to track 2
+                    set fsep to (ASCII character 31)
+                    set yr to year of t
+                    set c to comment of t
+                    if c is missing value then set c to ""
+                    return (name of t) & fsep & (artist of t) & fsep & (genre of t) & fsep & (id of t) & fsep & (yr as text) & fsep & c
+                end tell
             end try
             return ""
         end tell
@@ -116,6 +138,7 @@ final class SwinsianMonitor {
         if track.comment == nil {
             fetchCommentAndUpdate(baseTrack: track, state: .playing)
         }
+        fetchAndNotifyNextTrack()
     }
 
     private func handlePaused(userInfo: [AnyHashable: Any]?) {
@@ -161,6 +184,34 @@ final class SwinsianMonitor {
             }
         }
     }
+
+    func fetchAndNotifyNextTrack() {
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            guard let self else { return }
+            let raw = (self.runOsascript(Self.nextQueueTrackScript) ?? "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let track = Self.parseQueueTrack(raw)
+            DispatchQueue.main.async { [weak self] in
+                self?.onNextTrackUpdate?(track)
+            }
+        }
+    }
+
+    private static func parseQueueTrack(_ raw: String) -> Track? {
+        guard !raw.isEmpty else { return nil }
+        let sep = String(UnicodeScalar(31)!)   // ASCII unit separator
+        let fields = raw.components(separatedBy: sep)
+        guard fields.count == 6 else { return nil }
+        let title   = fields[0]
+        let artist  = fields[1]
+        let genre   = fields[2]
+        let pid     = fields[3]
+        let year    = Int(fields[4])
+        let comment = fields[5].isEmpty ? nil : fields[5]
+        guard !title.isEmpty, !pid.isEmpty else { return nil }
+        return Track(title: title, artist: artist, genre: genre,
+                     persistentID: pid, year: year, comment: comment)
+    }
 }
 
 // MARK: - MusicPlayerSource conformance
@@ -168,7 +219,7 @@ final class SwinsianMonitor {
 extension SwinsianMonitor: MusicPlayerSource {
     var supportsPlaylist: Bool { false }
     func pollNow()              {}  // push model: no polling
-    func triggerPlaylistFetch() {}  // no Swinsian playlist API
+    func triggerPlaylistFetch() { fetchAndNotifyNextTrack() }
 
     func fetchArtwork(for track: Track) async -> NSImage? {
         await withCheckedContinuation { continuation in

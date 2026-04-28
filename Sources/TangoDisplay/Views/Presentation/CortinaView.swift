@@ -50,6 +50,16 @@ struct CortinaView: View {
                             .foregroundColor(profile.yearSwiftUIColor)
                             .multilineTextAlignment(.center)
                     }
+
+                    if profile.showSinger && profile.showSingerDuringCortina,
+                       let singer = next.comment, !singer.isEmpty {
+                        Text(singer)
+                            .font(profile.singerFont)
+                            .foregroundColor(profile.singerSwiftUIColor)
+                            .multilineTextAlignment(.center)
+                            .lineLimit(2)
+                            .minimumScaleFactor(0.5)
+                    }
                 }
                 .padding(.horizontal, 60)
             }
