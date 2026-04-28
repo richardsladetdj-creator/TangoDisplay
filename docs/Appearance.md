@@ -27,26 +27,9 @@ Set the color of each element on the dancer display:
 | **Genre/label** | The smaller genre or record label line |
 | **Year** | The recording year (e.g. 1952) — only shown when **Show Year** is enabled |
 | **Track counter** | The "Track X of X" text in the corner |
-| **Singer** | The vocalist/singer line (only shown when **Include comments as singer** is enabled) |
+| **Singer** | The vocalist/singer line — always configurable here; the Singer line only appears on the display when **Include comments as singer** is enabled (set in Fonts) |
 
 Click any color swatch to open the macOS color picker.
-
----
-
-## Background Image
-
-![Appearance — background image and fonts](https://raw.githubusercontent.com/richardsladetdj-creator/TangoDisplay/main/docs/screenshots/appearance-background-v190.png)
-
-| Control | Description |
-|---|---|
-| **Change Image…** | Opens a file picker to select any image file |
-| **Clear** | Removes the background image |
-| **Opacity** | 0 % = fully transparent (solid background color shows), 100 % = fully opaque |
-| **Scale** | Zoom the image in or out (1× = original size, higher = zoomed in) |
-| **Horizontal** | Pan the image left or right |
-| **Vertical** | Pan the image up or down |
-
-Use Scale + Horizontal + Vertical to frame exactly the part of the image you want behind the text.
 
 ---
 
@@ -66,7 +49,26 @@ Artwork is fetched automatically from the playing track for all three player sou
 
 ---
 
+## Background Image
+
+![Appearance — background image](https://raw.githubusercontent.com/richardsladetdj-creator/TangoDisplay/main/docs/screenshots/appearance-background-v2-190.png)
+
+| Control | Description |
+|---|---|
+| **Pick Image… / Change Image…** | Opens a file picker to select any image file (label changes to *Change Image…* once an image is loaded) |
+| **Clear** | Removes the background image |
+| **Opacity** | 0 % = fully transparent (solid background color shows), 100 % = fully opaque |
+| **Scale** | Zoom the image in or out (1× = original size, higher = zoomed in) |
+| **Horizontal** | Pan the image left or right |
+| **Vertical** | Pan the image up or down |
+
+Use Scale + Horizontal + Vertical to frame exactly the part of the image you want behind the text.
+
+---
+
 ## Fonts
+
+![Appearance — fonts and singer](https://raw.githubusercontent.com/richardsladetdj-creator/TangoDisplay/main/docs/screenshots/appearance-singer-v190.png)
 
 Configure the typeface, size, and style for each text element:
 
