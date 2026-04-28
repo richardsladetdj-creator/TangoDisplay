@@ -267,7 +267,7 @@ final class AppState: ObservableObject {
         // known playlist (different playlist loaded), reset history and fetch fresh
         // playlist data. Show "Track 1" immediately; handlePlaylistUpdate will update
         // to the full "X of Y" position when the fetch completes.
-        let trackInPlaylist = playlistTracks?.contains(where: { $0.persistentID == track.persistentID }) ?? false
+        let trackInPlaylist = playlistTracks?.contains(where: { $0.persistentID == track.persistentID }) ?? true
         if (comingFromPlaying || comingFromCortina) && !trackInPlaylist {
             trackHistory = [track]
             activeSource.triggerPlaylistFetch()
