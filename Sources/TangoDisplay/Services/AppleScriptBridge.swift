@@ -21,21 +21,31 @@ final class AppleScriptBridge {
 
     private let queue = DispatchQueue(label: "com.tangodisplay.applescript", qos: .utility)
 
-    /// Returns list: [name, artist, genre, persistentID, year, playerStateString]
+    /// Returns list: [name, artist, genre, persistentID, year, playerStateString, comment]
     private static let trackScriptSource = """
         tell application "Music"
             try
                 if player state is playing then
                     set t to current track
-                    return {name of t, artist of t, genre of t, persistent ID of t, year of t, "playing"}
+                    set theComment to ""
+                    try
+                        set theComment to comment of t
+                        if theComment is missing value then set theComment to ""
+                    end try
+                    return {name of t, artist of t, genre of t, persistent ID of t, year of t, "playing", theComment}
                 else if player state is paused then
                     set t to current track
-                    return {name of t, artist of t, genre of t, persistent ID of t, year of t, "paused"}
+                    set theComment to ""
+                    try
+                        set theComment to comment of t
+                        if theComment is missing value then set theComment to ""
+                    end try
+                    return {name of t, artist of t, genre of t, persistent ID of t, year of t, "paused", theComment}
                 else
-                    return {"", "", "", "", 0, "stopped"}
+                    return {"", "", "", "", 0, "stopped", ""}
                 end if
             on error
-                return {"", "", "", "", 0, "stopped"}
+                return {"", "", "", "", 0, "stopped", ""}
             end try
         end tell
         """
@@ -191,7 +201,7 @@ final class AppleScriptBridge {
 
     // MARK: - Descriptor parsing
 
-    /// Parses a list descriptor: [name, artist, genre, persistentID, year, stateString]
+    /// Parses a list descriptor: [name, artist, genre, persistentID, year, stateString, comment]
     private static func parseTrackDescriptor(_ d: NSAppleEventDescriptor) -> (Track?, PlayerState) {
         let stateRaw = d.atIndex(6)?.stringValue ?? "stopped"
         let state = PlayerState(rawValue: stateRaw) ?? .stopped
@@ -206,12 +216,14 @@ final class AppleScriptBridge {
         let pid     = d.atIndex(4)?.stringValue ?? ""
         let yearRaw = d.atIndex(5)?.int32Value ?? 0
         let year    = yearRaw > 0 ? Int(yearRaw) : nil
+        let commentRaw = d.atIndex(7)?.stringValue ?? ""
+        let comment = commentRaw.isEmpty ? nil : commentRaw
 
         if pid.isEmpty && title.isEmpty {
             return (nil, .stopped)
         }
 
-        return (Track(title: title, artist: artist, genre: genre, persistentID: pid, year: year), state)
+        return (Track(title: title, artist: artist, genre: genre, persistentID: pid, year: year, comment: comment), state)
     }
 
     /// Parses: {currentIndex (int), [[name, artist, genre, pid], ...]}

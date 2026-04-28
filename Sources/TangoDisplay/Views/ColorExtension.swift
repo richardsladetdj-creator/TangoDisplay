@@ -35,6 +35,7 @@ extension AppearanceProfile {
     var genreSwiftUIColor: Color         { Color(hex: genreColor) }
     var yearSwiftUIColor: Color          { Color(hex: yearColor) }
     var trackCounterSwiftUIColor: Color  { Color(hex: trackCounterColor) }
+    var singerSwiftUIColor: Color        { Color(hex: singerColor) }
 
     func font(name: String, size: Double, bold: Bool, italic: Bool) -> Font {
         let weight: Font.Weight = bold ? .bold : .regular
@@ -51,4 +52,5 @@ extension AppearanceProfile {
     var artistFont: Font { font(name: artistFontName, size: artistFontSize, bold: artistFontBold, italic: artistFontItalic) }
     var genreFont: Font  { font(name: genreFontName,  size: genreFontSize,  bold: genreFontBold,  italic: genreFontItalic) }
     var yearFont: Font   { font(name: yearFontName,   size: yearFontSize,   bold: yearFontBold,   italic: yearFontItalic) }
+    var singerFont: Font { font(name: singerFontName, size: singerFontSize, bold: singerFontBold, italic: singerFontItalic) }
 }

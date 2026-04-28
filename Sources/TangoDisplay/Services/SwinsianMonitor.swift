@@ -25,13 +25,26 @@ final class SwinsianMonitor {
 
     private var observers: [AnyObject] = []
 
-    // MARK: - Artwork (file path via osascript + AVFoundation)
+    // MARK: - AppleScript helpers
 
     private static let artworkPathScript = """
         tell application "Swinsian"
             try
                 if player state is not stopped then
                     return location of current track
+                end if
+            end try
+            return ""
+        end tell
+        """
+
+    private static let commentScript = """
+        tell application "Swinsian"
+            try
+                if player state is not stopped then
+                    set c to comment of current track
+                    if c is missing value then return ""
+                    return c
                 end if
             end try
             return ""
@@ -95,18 +108,24 @@ final class SwinsianMonitor {
     // MARK: - Notification handlers
 
     private func handlePlaying(userInfo: [AnyHashable: Any]?) {
-        if let track = parseTrack(from: userInfo) {
-            onTrackUpdate?(track, .playing)
-        } else {
+        guard let track = parseTrack(from: userInfo) else {
             onTrackUpdate?(nil, .stopped)
+            return
+        }
+        onTrackUpdate?(track, .playing)
+        if track.comment == nil {
+            fetchCommentAndUpdate(baseTrack: track, state: .playing)
         }
     }
 
     private func handlePaused(userInfo: [AnyHashable: Any]?) {
-        if let track = parseTrack(from: userInfo) {
-            onTrackUpdate?(track, .paused)
-        } else {
+        guard let track = parseTrack(from: userInfo) else {
             onTrackUpdate?(nil, .stopped)
+            return
+        }
+        onTrackUpdate?(track, .paused)
+        if track.comment == nil {
+            fetchCommentAndUpdate(baseTrack: track, state: .paused)
         }
     }
 
@@ -116,14 +135,31 @@ final class SwinsianMonitor {
               !uuid.isEmpty
         else { return nil }
 
-        let title   = info["title"]  as? String ?? ""
-        let artist  = info["artist"] as? String ?? ""
-        let genre   = info["genre"]  as? String ?? ""
-        let yearRaw = (info["year"] as? NSNumber)?.intValue
-                   ?? Int(info["year"] as? String ?? "")
-                   ?? 0
-        let year    = yearRaw > 0 ? yearRaw : nil
-        return Track(title: title, artist: artist, genre: genre, persistentID: uuid, year: year)
+        let title      = info["title"]   as? String ?? ""
+        let artist     = info["artist"]  as? String ?? ""
+        let genre      = info["genre"]   as? String ?? ""
+        let yearRaw    = (info["year"] as? NSNumber)?.intValue
+                      ?? Int(info["year"] as? String ?? "")
+                      ?? 0
+        let year       = yearRaw > 0 ? yearRaw : nil
+        let commentRaw = info["comment"] as? String ?? ""
+        let comment    = commentRaw.isEmpty ? nil : commentRaw
+        return Track(title: title, artist: artist, genre: genre, persistentID: uuid, year: year, comment: comment)
+    }
+
+    private func fetchCommentAndUpdate(baseTrack: Track, state: PlayerState) {
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            guard let self else { return }
+            let raw = self.runOsascript(Self.commentScript) ?? ""
+            let comment = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !comment.isEmpty else { return }
+            let updated = Track(title: baseTrack.title, artist: baseTrack.artist,
+                                genre: baseTrack.genre, persistentID: baseTrack.persistentID,
+                                year: baseTrack.year, comment: comment)
+            DispatchQueue.main.async { [weak self] in
+                self?.onTrackUpdate?(updated, state)
+            }
+        }
     }
 }
 

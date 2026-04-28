@@ -47,6 +47,14 @@ public struct AppearanceProfile: Codable, Identifiable, Equatable {
     public var albumArtworkOffsetX: Double   // points, horizontal pan
     public var albumArtworkOffsetY: Double   // points, vertical pan
 
+    // Singer line (displays track comment field below the title)
+    public var showSinger: Bool
+    public var singerFontName: String
+    public var singerFontSize: Double
+    public var singerFontBold: Bool
+    public var singerFontItalic: Bool
+    public var singerColor: String
+
     public init(id: UUID, name: String, isBuiltIn: Bool,
                 titleFontName: String = "System", titleFontSize: Double = 72,
                 titleFontBold: Bool = true, titleFontItalic: Bool = false,
@@ -74,7 +82,13 @@ public struct AppearanceProfile: Codable, Identifiable, Equatable {
                 albumArtworkOpacity: Double = 1.0,
                 albumArtworkScale: Double = 1.0,
                 albumArtworkOffsetX: Double = 0.0,
-                albumArtworkOffsetY: Double = 0.0) {
+                albumArtworkOffsetY: Double = 0.0,
+                showSinger: Bool = false,
+                singerFontName: String = "System",
+                singerFontSize: Double = 48,
+                singerFontBold: Bool = false,
+                singerFontItalic: Bool = false,
+                singerColor: String = "#AAAAAA") {
         self.id = id
         self.name = name
         self.isBuiltIn = isBuiltIn
@@ -113,6 +127,12 @@ public struct AppearanceProfile: Codable, Identifiable, Equatable {
         self.albumArtworkScale = albumArtworkScale
         self.albumArtworkOffsetX = albumArtworkOffsetX
         self.albumArtworkOffsetY = albumArtworkOffsetY
+        self.showSinger = showSinger
+        self.singerFontName = singerFontName
+        self.singerFontSize = singerFontSize
+        self.singerFontBold = singerFontBold
+        self.singerFontItalic = singerFontItalic
+        self.singerColor = singerColor
     }
 
     // Custom decoder so existing JSON lacking the image keys still loads cleanly.
@@ -157,6 +177,12 @@ public struct AppearanceProfile: Codable, Identifiable, Equatable {
         albumArtworkScale       = try c.decodeIfPresent(Double.self,  forKey: .albumArtworkScale)       ?? 1.0
         albumArtworkOffsetX     = try c.decodeIfPresent(Double.self,  forKey: .albumArtworkOffsetX)     ?? 0.0
         albumArtworkOffsetY     = try c.decodeIfPresent(Double.self,  forKey: .albumArtworkOffsetY)     ?? 0.0
+        showSinger              = try c.decodeIfPresent(Bool.self,    forKey: .showSinger)              ?? false
+        singerFontName          = try c.decodeIfPresent(String.self,  forKey: .singerFontName)          ?? "System"
+        singerFontSize          = try c.decodeIfPresent(Double.self,  forKey: .singerFontSize)          ?? 48
+        singerFontBold          = try c.decodeIfPresent(Bool.self,    forKey: .singerFontBold)          ?? false
+        singerFontItalic        = try c.decodeIfPresent(Bool.self,    forKey: .singerFontItalic)        ?? false
+        singerColor             = try c.decodeIfPresent(String.self,  forKey: .singerColor)             ?? "#AAAAAA"
     }
 
     public static let builtIns: [AppearanceProfile] = [.classic, .modern, .highContrast]

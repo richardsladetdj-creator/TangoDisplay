@@ -46,6 +46,7 @@ struct AppearanceSettingsView: View {
                 colorRow("Title",         hex: $working.titleColor)
                 colorRow("Genre/label",   hex: $working.genreColor)
                 colorRow("Year",          hex: $working.yearColor)
+                colorRow("Singer",        hex: $working.singerColor)
                 colorRow("Track counter", hex: $working.trackCounterColor)
             } header: {
                 Text("Colors")
@@ -169,6 +170,11 @@ struct AppearanceSettingsView: View {
                 if working.showYear {
                     fontRow("Year", name: $working.yearFontName, size: $working.yearFontSize,
                             bold: $working.yearFontBold, italic: $working.yearFontItalic)
+                }
+                Toggle("Include comments as singer", isOn: $working.showSinger)
+                if working.showSinger {
+                    fontRow("Singer", name: $working.singerFontName, size: $working.singerFontSize,
+                            bold: $working.singerFontBold, italic: $working.singerFontItalic)
                 }
             } header: {
                 Text("Fonts")

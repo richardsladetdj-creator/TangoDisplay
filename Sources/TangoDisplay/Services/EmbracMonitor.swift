@@ -44,9 +44,9 @@ final class EmbracMonitor {
 
     // MARK: - AppleScript source
 
-    /// Returns eleven newline-delimited fields: state, title, artist, genre, id, year,
-    /// nextTitle, nextArtist, nextGenre, nextID, nextYear. Next-track fields are empty
-    /// strings / "0" when there is no following track. Uses current index + track N
+    /// Returns twelve newline-delimited fields: state, title, artist, genre, id, year,
+    /// comment, nextTitle, nextArtist, nextGenre, nextID, nextYear. Next-track fields are
+    /// empty strings / "0" when there is no following track. Uses current index + track N
     /// lookup (Embrace uses 1-based indexing; 0 = no track loaded). Uses
     /// `player state as string` because Embrace's dictionary does not export `paused`
     /// as a named constant — comparing `player state is paused` throws -2753 at runtime.
@@ -55,7 +55,7 @@ final class EmbracMonitor {
             try
                 set idx to current index
                 if idx is 0 then
-                    return "stopped" & linefeed & "" & linefeed & "" & linefeed & "" & linefeed & "" & linefeed & "0" & linefeed & "" & linefeed & "" & linefeed & "" & linefeed & "" & linefeed & "0"
+                    return "stopped" & linefeed & "" & linefeed & "" & linefeed & "" & linefeed & "" & linefeed & "0" & linefeed & "" & linefeed & "" & linefeed & "" & linefeed & "" & linefeed & "" & linefeed & "0"
                 end if
                 set t to track idx
                 set theTitle to title of t
@@ -66,9 +66,14 @@ final class EmbracMonitor {
                 set theID to id of t
                 set theYear to year of t
                 if theYear is missing value then set theYear to 0
+                set theComment to ""
+                try
+                    set theComment to comment of t
+                    if theComment is missing value then set theComment to ""
+                end try
                 set stateStr to player state as string
                 if stateStr is "stopped" then
-                    return "stopped" & linefeed & "" & linefeed & "" & linefeed & "" & linefeed & "" & linefeed & "0" & linefeed & "" & linefeed & "" & linefeed & "" & linefeed & "" & linefeed & "0"
+                    return "stopped" & linefeed & "" & linefeed & "" & linefeed & "" & linefeed & "" & linefeed & "0" & linefeed & "" & linefeed & "" & linefeed & "" & linefeed & "" & linefeed & "" & linefeed & "0"
                 end if
                 set totalTracks to count of tracks
                 set nextTitle to ""
@@ -89,9 +94,9 @@ final class EmbracMonitor {
                         if nextYear is missing value then set nextYear to 0
                     end try
                 end if
-                return stateStr & linefeed & theTitle & linefeed & theArtist & linefeed & theGenre & linefeed & theID & linefeed & theYear & linefeed & nextTitle & linefeed & nextArtist & linefeed & nextGenre & linefeed & nextID & linefeed & nextYear
+                return stateStr & linefeed & theTitle & linefeed & theArtist & linefeed & theGenre & linefeed & theID & linefeed & theYear & linefeed & theComment & linefeed & nextTitle & linefeed & nextArtist & linefeed & nextGenre & linefeed & nextID & linefeed & nextYear
             on error
-                return "stopped" & linefeed & "" & linefeed & "" & linefeed & "" & linefeed & "" & linefeed & "0" & linefeed & "" & linefeed & "" & linefeed & "" & linefeed & "" & linefeed & "0"
+                return "stopped" & linefeed & "" & linefeed & "" & linefeed & "" & linefeed & "" & linefeed & "0" & linefeed & "" & linefeed & "" & linefeed & "" & linefeed & "" & linefeed & "" & linefeed & "0"
             end try
         end tell
         """
@@ -287,8 +292,8 @@ final class EmbracMonitor {
 
     // MARK: - Output parsing
 
-    /// Parses eleven newline-delimited fields: state, title, artist, genre, id, year,
-    /// nextTitle, nextArtist, nextGenre, nextID, nextYear.
+    /// Parses twelve newline-delimited fields: state, title, artist, genre, id, year,
+    /// comment, nextTitle, nextArtist, nextGenre, nextID, nextYear.
     /// Returns (currentTrack, nextTrack, playerState).
     private func parseOutput(_ output: String) -> (Track?, Track?, PlayerState) {
         // osascript appends a trailing newline; split keeping empty strings to preserve indices
@@ -299,22 +304,24 @@ final class EmbracMonitor {
 
         guard state != .stopped else { return (nil, nil, .stopped) }
 
-        let title   = lines.count > 1 ? lines[1] : ""
-        let artist  = lines.count > 2 ? lines[2] : ""
-        let genre   = lines.count > 3 ? lines[3] : ""
-        let pid     = lines.count > 4 ? lines[4].trimmingCharacters(in: .whitespaces) : ""
-        let yearRaw = lines.count > 5 ? Int(lines[5].trimmingCharacters(in: .whitespaces)) ?? 0 : 0
-        let year    = yearRaw > 0 ? yearRaw : nil
+        let title      = lines.count > 1 ? lines[1] : ""
+        let artist     = lines.count > 2 ? lines[2] : ""
+        let genre      = lines.count > 3 ? lines[3] : ""
+        let pid        = lines.count > 4 ? lines[4].trimmingCharacters(in: .whitespaces) : ""
+        let yearRaw    = lines.count > 5 ? Int(lines[5].trimmingCharacters(in: .whitespaces)) ?? 0 : 0
+        let year       = yearRaw > 0 ? yearRaw : nil
+        let commentRaw = lines.count > 6 ? lines[6] : ""
+        let comment    = commentRaw.isEmpty ? nil : commentRaw
 
         guard !pid.isEmpty || !title.isEmpty else { return (nil, nil, .stopped) }
 
-        let currentTrack = Track(title: title, artist: artist, genre: genre, persistentID: pid, year: year)
+        let currentTrack = Track(title: title, artist: artist, genre: genre, persistentID: pid, year: year, comment: comment)
 
-        let nextTitle   = lines.count > 6  ? lines[6] : ""
-        let nextArtist  = lines.count > 7  ? lines[7] : ""
-        let nextGenre   = lines.count > 8  ? lines[8] : ""
-        let nextID      = lines.count > 9  ? lines[9].trimmingCharacters(in: .whitespaces) : ""
-        let nextYearRaw = lines.count > 10 ? Int(lines[10].trimmingCharacters(in: .whitespaces)) ?? 0 : 0
+        let nextTitle   = lines.count > 7  ? lines[7] : ""
+        let nextArtist  = lines.count > 8  ? lines[8] : ""
+        let nextGenre   = lines.count > 9  ? lines[9] : ""
+        let nextID      = lines.count > 10 ? lines[10].trimmingCharacters(in: .whitespaces) : ""
+        let nextYearRaw = lines.count > 11 ? Int(lines[11].trimmingCharacters(in: .whitespaces)) ?? 0 : 0
         let nextYear    = nextYearRaw > 0 ? nextYearRaw : nil
 
         let nextTrack: Track? = nextID.isEmpty && nextTitle.isEmpty ? nil :

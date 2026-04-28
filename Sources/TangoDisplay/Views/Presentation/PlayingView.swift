@@ -45,6 +45,16 @@ struct PlayingView: View {
                     .minimumScaleFactor(0.5)
             }
 
+            // Singer (from track comments field, shown below title)
+            if profile.showSinger, let singer = state.currentTrack?.comment, !singer.isEmpty {
+                Text(singer)
+                    .font(profile.singerFont)
+                    .foregroundColor(profile.singerSwiftUIColor)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.5)
+            }
+
             Spacer()
         }
         .padding(.horizontal, 60)
