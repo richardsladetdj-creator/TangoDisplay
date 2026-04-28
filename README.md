@@ -43,7 +43,7 @@ A native macOS menu-bar app that shows a clean, fullscreen dancer display on an 
 ### Option A — Download pre-built app (easiest)
 
 1. Go to the [Releases](https://github.com/richardsladetdj-creator/TangoDisplay/releases) page
-2. Download `TangoDisplay-v2.0.0.zip`
+2. Download `TangoDisplay-v2.0.1.zip`
 3. Unzip and drag `TangoDisplay.app` to your `/Applications` folder
 4. **Right-click › Open** on first launch (required because the app is ad-hoc signed, not notarised)
 5. Grant the permissions macOS requests (see [Permissions](#permissions) below)
@@ -129,6 +129,9 @@ Key design decisions:
 ---
 
 ## Changelog
+
+### v2.0.1
+- **Fix (Swinsian):** Track counter now increments correctly through a tanda (Track 1, Track 2, Track 3 …). Previously it was stuck at "Track 1" on every track because the playlist-membership guard always fired when no playlist data is available, resetting the track history on each track change.
 
 ### v2.0.0
 - **New (Swinsian):** Swinsian now supports next-track look-ahead via the playback queue. The "Coming Up" next-tanda preview is now shown during cortinas when using Swinsian, bringing it to full parity with Music.app and Embrace for cortina previews.
