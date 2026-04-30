@@ -32,7 +32,7 @@ A native macOS menu-bar app that shows a clean, fullscreen dancer display on an 
 
 | Requirement | Detail |
 |---|---|
-| macOS | 13 Ventura or later |
+| macOS | 13 Ventura or later (Intel and Apple Silicon) |
 | Music.app | Required when using Music.app as the player source (default). Must be running and playing from a playlist. |
 | Swinsian | Required only if selecting Swinsian as the player source in Settings › Player. |
 | Embrace | Required only if selecting Embrace as the player source in Settings › Player. |
@@ -45,7 +45,7 @@ A native macOS menu-bar app that shows a clean, fullscreen dancer display on an 
 ### Option A — Download pre-built app (easiest)
 
 1. Go to the [Releases](https://github.com/richardsladetdj-creator/TangoDisplay/releases) page
-2. Download `TangoDisplay-v2.3.0.zip`
+2. Download `TangoDisplay-v2.3.0-universal.zip` (works on both Apple Silicon and Intel Macs)
 3. Unzip and drag `TangoDisplay.app` to your `/Applications` folder
 4. **Right-click › Open** on first launch (required because the app is ad-hoc signed, not notarised)
 5. Grant the permissions macOS requests (see [Permissions](#permissions) below)
@@ -63,7 +63,7 @@ cd TangoDisplay
 
 `Install.sh` requires Xcode Command Line Tools (`xcode-select --install`). It will:
 - Regenerate the app icon
-- Build a release binary with `swift build -c release`
+- Build a universal binary (arm64 + x86_64) using `swift build` and `lipo`
 - Assemble `TangoDisplay.app` with a correct `Info.plist`
 - Ad-hoc code-sign the bundle
 - Install to `/Applications` and launch the app

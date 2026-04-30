@@ -15,10 +15,15 @@ swift Scripts/GenerateIcon.swift
 iconutil -c icns icon.iconset -o icon.icns
 rm -rf icon.iconset
 
-echo "== Build (Release) =="
-swift build -c release
+echo "== Build (Release, universal) =="
+swift build -c release --triple arm64-apple-macosx13.0
+swift build -c release --triple x86_64-apple-macosx13.0
+lipo -create \
+  ".build/arm64-apple-macosx/release/$APP_NAME" \
+  ".build/x86_64-apple-macosx/release/$APP_NAME" \
+  -output ".build/$APP_NAME-universal"
 
-BIN_PATH=".build/release/$APP_NAME"
+BIN_PATH=".build/$APP_NAME-universal"
 if [[ ! -f "$BIN_PATH" ]]; then
   echo "ERROR: Expected binary at $BIN_PATH"
   exit 1
