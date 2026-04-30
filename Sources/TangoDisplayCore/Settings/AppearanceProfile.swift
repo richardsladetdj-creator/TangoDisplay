@@ -61,6 +61,23 @@ public struct AppearanceProfile: Codable, Identifiable, Equatable {
     public var singerFontItalic: Bool
     public var singerColor: String
 
+    // Per-type field visibility (Dance Track)
+    public var showGenreDance:   Bool
+    public var showArtistDance:  Bool
+    public var showYearDance:    Bool
+    public var showTitleDance:   Bool
+    public var showSingerDance:  Bool
+    public var showArtworkDance: Bool
+
+    // Per-type field visibility (Cortina "Coming Up")
+    public var showNextTrackDuringCortina: Bool
+    public var showGenreCortina:   Bool
+    public var showArtistCortina:  Bool
+    public var showYearCortina:    Bool
+    public var showTitleCortina:   Bool
+    public var showSingerCortina:  Bool
+    public var showArtworkCortina: Bool
+
     public init(id: UUID, name: String, isBuiltIn: Bool,
                 titleFontName: String = "System", titleFontSize: Double = 72,
                 titleFontBold: Bool = true, titleFontItalic: Bool = false,
@@ -98,7 +115,20 @@ public struct AppearanceProfile: Codable, Identifiable, Equatable {
                 singerFontSize: Double = 48,
                 singerFontBold: Bool = false,
                 singerFontItalic: Bool = false,
-                singerColor: String = "#AAAAAA") {
+                singerColor: String = "#AAAAAA",
+                showGenreDance: Bool = true,
+                showArtistDance: Bool = true,
+                showYearDance: Bool = false,
+                showTitleDance: Bool = true,
+                showSingerDance: Bool = false,
+                showArtworkDance: Bool = false,
+                showNextTrackDuringCortina: Bool = true,
+                showGenreCortina: Bool = true,
+                showArtistCortina: Bool = true,
+                showYearCortina: Bool = false,
+                showTitleCortina: Bool = false,
+                showSingerCortina: Bool = false,
+                showArtworkCortina: Bool = false) {
         self.id = id
         self.name = name
         self.isBuiltIn = isBuiltIn
@@ -147,6 +177,19 @@ public struct AppearanceProfile: Codable, Identifiable, Equatable {
         self.singerFontBold = singerFontBold
         self.singerFontItalic = singerFontItalic
         self.singerColor = singerColor
+        self.showGenreDance   = showGenreDance
+        self.showArtistDance  = showArtistDance
+        self.showYearDance    = showYearDance
+        self.showTitleDance   = showTitleDance
+        self.showSingerDance  = showSingerDance
+        self.showArtworkDance = showArtworkDance
+        self.showNextTrackDuringCortina = showNextTrackDuringCortina
+        self.showGenreCortina   = showGenreCortina
+        self.showArtistCortina  = showArtistCortina
+        self.showYearCortina    = showYearCortina
+        self.showTitleCortina   = showTitleCortina
+        self.showSingerCortina  = showSingerCortina
+        self.showArtworkCortina = showArtworkCortina
     }
 
     // Custom decoder so existing JSON lacking the image keys still loads cleanly.
@@ -200,11 +243,40 @@ public struct AppearanceProfile: Codable, Identifiable, Equatable {
         singerFontItalic        = try c.decodeIfPresent(Bool.self,    forKey: .singerFontItalic)        ?? false
         singerColor             = try c.decodeIfPresent(String.self,  forKey: .singerColor)             ?? "#AAAAAA"
         danceItemOrder   = try c.decodeIfPresent([DisplayTextItem].self, forKey: .danceItemOrder)   ?? [.genre, .artist, .year, .title, .singer]
-        cortinaItemOrder = try c.decodeIfPresent([DisplayTextItem].self, forKey: .cortinaItemOrder) ?? [.genre, .artist, .year, .singer]
+        var decodedCortinaOrder = try c.decodeIfPresent([DisplayTextItem].self, forKey: .cortinaItemOrder) ?? [.genre, .artist, .year, .singer]
+        if !decodedCortinaOrder.contains(.title) {
+            if let singerIdx = decodedCortinaOrder.firstIndex(of: .singer) {
+                decodedCortinaOrder.insert(.title, at: singerIdx)
+            } else {
+                decodedCortinaOrder.append(.title)
+            }
+        }
+        cortinaItemOrder = decodedCortinaOrder
+
+        // Legacy field values for migration
+        let legacyShowYear          = (try c.decodeIfPresent(Bool.self, forKey: .showYear))             ?? false
+        let legacyShowSinger        = (try c.decodeIfPresent(Bool.self, forKey: .showSinger))           ?? false
+        let legacyShowSingerCortina = (try c.decodeIfPresent(Bool.self, forKey: .showSingerDuringCortina)) ?? false
+        let legacyShowArtwork       = (try c.decodeIfPresent(Bool.self, forKey: .showAlbumArtwork))     ?? false
+        let legacyCortinaHadTitle   = (try c.decodeIfPresent([DisplayTextItem].self, forKey: .cortinaItemOrder))?.contains(.title) ?? false
+
+        showGenreDance   = (try c.decodeIfPresent(Bool.self, forKey: .showGenreDance))   ?? true
+        showArtistDance  = (try c.decodeIfPresent(Bool.self, forKey: .showArtistDance))  ?? true
+        showYearDance    = (try c.decodeIfPresent(Bool.self, forKey: .showYearDance))    ?? legacyShowYear
+        showTitleDance   = (try c.decodeIfPresent(Bool.self, forKey: .showTitleDance))   ?? true
+        showSingerDance  = (try c.decodeIfPresent(Bool.self, forKey: .showSingerDance))  ?? legacyShowSinger
+        showArtworkDance = (try c.decodeIfPresent(Bool.self, forKey: .showArtworkDance)) ?? legacyShowArtwork
+
+        showNextTrackDuringCortina = (try c.decodeIfPresent(Bool.self, forKey: .showNextTrackDuringCortina)) ?? true
+        showGenreCortina   = (try c.decodeIfPresent(Bool.self, forKey: .showGenreCortina))   ?? true
+        showArtistCortina  = (try c.decodeIfPresent(Bool.self, forKey: .showArtistCortina))  ?? true
+        showYearCortina    = (try c.decodeIfPresent(Bool.self, forKey: .showYearCortina))    ?? legacyShowYear
+        showTitleCortina   = (try c.decodeIfPresent(Bool.self, forKey: .showTitleCortina))   ?? legacyCortinaHadTitle
+        showSingerCortina  = (try c.decodeIfPresent(Bool.self, forKey: .showSingerCortina))  ?? legacyShowSingerCortina
+        showArtworkCortina = (try c.decodeIfPresent(Bool.self, forKey: .showArtworkCortina)) ?? legacyShowArtwork
     }
 
     public func singerValue(from track: Track) -> String? {
-        guard showSinger else { return nil }
         switch singerSource {
         case .comments:    return track.comment
         case .albumArtist: return track.albumArtist

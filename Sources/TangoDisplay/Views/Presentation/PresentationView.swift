@@ -19,6 +19,14 @@ struct PresentationView: View {
         return AppearanceProfile.classic
     }
 
+    private var shouldShowArtwork: Bool {
+        switch appState.displayState.mode {
+        case .playing: return activeProfile.showArtworkDance
+        case .cortina: return activeProfile.showArtworkCortina
+        default:       return false
+        }
+    }
+
     var body: some View {
         // Content layer: transitions between playing/idle/cortina views.
         // Background is applied behind it; track counter is overlaid on top.
@@ -26,7 +34,7 @@ struct PresentationView: View {
             // Album artwork layer — above background, below text.
             // Uses displayedArtworkTrackID as transition identity so it
             // transitions in/out with each track change (same timing as text).
-            if activeProfile.showAlbumArtwork {
+            if shouldShowArtwork {
                 TransitionContainer(
                     identity: appState.displayedArtworkTrackID,
                     style: activeProfile.transitionStyle,

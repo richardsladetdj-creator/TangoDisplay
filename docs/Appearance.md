@@ -25,11 +25,30 @@ Set the color of each element on the dancer display:
 | **Artist** | The large artist/orchestra name text |
 | **Title** | The track title text |
 | **Genre/label** | The smaller genre or record label line |
-| **Year** | The recording year (e.g. 1952) — only shown when **Show Year** is enabled |
+| **Year** | The recording year (e.g. 1952) |
 | **Track counter** | The "Track X of X" text in the corner |
-| **Singer** | The vocalist/singer line — always configurable here; the Singer line only appears on the display when **Include singer** is enabled (set in Fonts) |
+| **Singer** | The vocalist/singer line |
 
 Click any color swatch to open the macOS color picker.
+
+---
+
+## Field Visibility
+
+![Appearance — field visibility](https://raw.githubusercontent.com/richardsladetdj-creator/TangoDisplay/main/docs/screenshots/appearance-fieldvisibility-v230.png)
+
+Control which fields are shown — independently for dance tracks and for the cortina "Coming Up" preview. Each row has two toggles: **Dance** (shown while a tanda is playing) and **Cortina** (shown in the next-track preview during a cortina).
+
+| Field | Dance default | Cortina default |
+|---|---|---|
+| **Genre** | On | On |
+| **Artist** | On | On |
+| **Year** | Off | Off |
+| **Title** | On | Off |
+| **Singer** | Off | Off |
+| **Artwork** | Off | Off |
+
+A second toggle — **Show next track during cortina** — hides or shows the entire "Coming Up" next-track preview section. When off, the cortina screen shows only the cortina label with no preview content at all.
 
 ---
 
@@ -37,9 +56,10 @@ Click any color swatch to open the macOS color picker.
 
 ![Appearance — album artwork](https://raw.githubusercontent.com/richardsladetdj-creator/TangoDisplay/main/docs/screenshots/appearance-artwork-v190.png)
 
+Configure how album artwork appears on the dancer screen. Artwork visibility is controlled per context in **Field Visibility** above — these sliders only take effect when artwork is enabled for Dance or Cortina (or both).
+
 | Control | Description |
 |---|---|
-| **Display album artwork where available** | Toggle artwork display on/off |
 | **Opacity** | 0 % = invisible, 100 % = fully opaque |
 | **Scale** | 1× = natural size; increase to fill more of the screen |
 | **Horizontal offset** | Move the artwork left (negative) or right (positive) |
@@ -80,11 +100,11 @@ Configure the typeface, size, and style for each text element:
 | **B** | Bold |
 | *I* | Italic |
 
-The rows are **Artist**, **Title**, **Genre**, **Year**, and **Singer**. Year only appears when **Show Year** is enabled — toggle it on with the **Show Year** switch above the Year row.
+The rows are **Artist**, **Title**, **Genre**, **Year**, and **Singer**. Whether each field is shown on the dancer screen is controlled in **Field Visibility** above.
 
 ### Singer Source
 
-Enable the singer line with the **Include singer** toggle. When on, a **Source** picker lets you choose where the singer name comes from:
+A **Source** picker lets you choose where the singer name comes from:
 
 | Source | Description |
 |---|---|
@@ -92,8 +112,6 @@ Enable the singer line with the **Include singer** toggle. When on, a **Source**
 | **Album Artist** | Reads the Album Artist metadata field. Useful when Album Artist holds the vocalist name (common in some tango library workflows). |
 
 A **Singer** font row appears below the source picker so you can set the typeface, size, and style independently of the other text elements.
-
-When the singer line is on, a second toggle — **Show singer during cortina** — controls whether the vocalist name also appears in the cortina "Coming Up" preview.
 
 ---
 

@@ -54,9 +54,28 @@ struct AppearanceSettingsView: View {
             }
 
             Section {
-                Toggle("Display album artwork where available", isOn: $working.showAlbumArtwork)
+                HStack {
+                    Text("").frame(maxWidth: .infinity, alignment: .leading)
+                    Text("Dance").frame(width: 70, alignment: .center).foregroundColor(.secondary).font(.subheadline)
+                    Text("Cortina").frame(width: 70, alignment: .center).foregroundColor(.secondary).font(.subheadline)
+                }
+                visibilityRow("Genre",   dance: $working.showGenreDance,   cortina: $working.showGenreCortina)
+                visibilityRow("Artist",  dance: $working.showArtistDance,  cortina: $working.showArtistCortina)
+                visibilityRow("Year",    dance: $working.showYearDance,    cortina: $working.showYearCortina)
+                visibilityRow("Title",   dance: $working.showTitleDance,   cortina: $working.showTitleCortina)
+                visibilityRow("Singer",  dance: $working.showSingerDance,  cortina: $working.showSingerCortina)
+                visibilityRow("Artwork", dance: $working.showArtworkDance, cortina: $working.showArtworkCortina)
 
-                if working.showAlbumArtwork {
+                Divider()
+
+                Toggle("Show next track during cortina", isOn: $working.showNextTrackDuringCortina)
+            } header: {
+                Text("Field Visibility")
+                    .foregroundColor(ControlTheme.accent)
+            }
+
+            Section {
+                if working.showArtworkDance || working.showArtworkCortina {
                     HStack {
                         Text("Opacity")
                         Slider(value: $working.albumArtworkOpacity, in: 0...1)
@@ -85,6 +104,10 @@ struct AppearanceSettingsView: View {
                             .monospacedDigit()
                             .frame(width: 48)
                     }
+                } else {
+                    Text("Enable artwork in Field Visibility to configure.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
                 }
             } header: {
                 Text("Album Artwork")
@@ -166,23 +189,16 @@ struct AppearanceSettingsView: View {
                         bold: $working.titleFontBold,  italic: $working.titleFontItalic)
                 fontRow("Genre",  name: $working.genreFontName,  size: $working.genreFontSize,
                         bold: $working.genreFontBold,  italic: $working.genreFontItalic)
-                Toggle("Show Year", isOn: $working.showYear)
-                if working.showYear {
-                    fontRow("Year", name: $working.yearFontName, size: $working.yearFontSize,
-                            bold: $working.yearFontBold, italic: $working.yearFontItalic)
-                }
-                Toggle("Include singer", isOn: $working.showSinger)
-                if working.showSinger {
-                    Picker("Source", selection: $working.singerSource) {
-                        ForEach(SingerSource.allCases, id: \.self) { source in
-                            Text(source.displayName).tag(source)
-                        }
+                fontRow("Year", name: $working.yearFontName, size: $working.yearFontSize,
+                        bold: $working.yearFontBold, italic: $working.yearFontItalic)
+                Picker("Singer source", selection: $working.singerSource) {
+                    ForEach(SingerSource.allCases, id: \.self) { source in
+                        Text(source.displayName).tag(source)
                     }
-                    .pickerStyle(.segmented)
-                    fontRow("Singer", name: $working.singerFontName, size: $working.singerFontSize,
-                            bold: $working.singerFontBold, italic: $working.singerFontItalic)
-                    Toggle("Show singer during cortina", isOn: $working.showSingerDuringCortina)
                 }
+                .pickerStyle(.segmented)
+                fontRow("Singer", name: $working.singerFontName, size: $working.singerFontSize,
+                        bold: $working.singerFontBold, italic: $working.singerFontItalic)
             } header: {
                 Text("Fonts")
                     .foregroundColor(ControlTheme.accent)
@@ -290,6 +306,14 @@ struct AppearanceSettingsView: View {
                 .buttonStyle(.borderless)
                 .disabled(index == items.wrappedValue.count - 1)
             }
+        }
+    }
+
+    private func visibilityRow(_ label: String, dance: Binding<Bool>, cortina: Binding<Bool>) -> some View {
+        HStack {
+            Text(label).frame(maxWidth: .infinity, alignment: .leading)
+            Toggle("", isOn: dance).labelsHidden().frame(width: 70, alignment: .center)
+            Toggle("", isOn: cortina).labelsHidden().frame(width: 70, alignment: .center)
         }
     }
 

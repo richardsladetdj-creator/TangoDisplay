@@ -12,14 +12,14 @@ struct PlayingView: View {
             ForEach(profile.danceItemOrder, id: \.self) { item in
                 switch item {
                 case .genre:
-                    if let genre = state.currentTrack?.genre, !genre.isEmpty {
+                    if profile.showGenreDance, let genre = state.currentTrack?.genre, !genre.isEmpty {
                         Text(genre.uppercased())
                             .font(profile.genreFont)
                             .foregroundColor(profile.genreSwiftUIColor)
                             .multilineTextAlignment(.center)
                     }
                 case .artist:
-                    if let artist = state.currentTrack?.artist, !artist.isEmpty {
+                    if profile.showArtistDance, let artist = state.currentTrack?.artist, !artist.isEmpty {
                         Text(artist)
                             .font(profile.artistFont)
                             .foregroundColor(profile.artistSwiftUIColor)
@@ -28,14 +28,14 @@ struct PlayingView: View {
                             .minimumScaleFactor(0.5)
                     }
                 case .year:
-                    if profile.showYear, let year = state.currentTrack?.year {
+                    if profile.showYearDance, let year = state.currentTrack?.year {
                         Text(String(year))
                             .font(profile.yearFont)
                             .foregroundColor(profile.yearSwiftUIColor)
                             .multilineTextAlignment(.center)
                     }
                 case .title:
-                    if let title = state.currentTrack?.title, !title.isEmpty {
+                    if profile.showTitleDance, let title = state.currentTrack?.title, !title.isEmpty {
                         Text(title)
                             .font(profile.titleFont)
                             .foregroundColor(profile.titleSwiftUIColor)
@@ -44,7 +44,9 @@ struct PlayingView: View {
                             .minimumScaleFactor(0.5)
                     }
                 case .singer:
-                    if let singer = state.currentTrack.flatMap({ profile.singerValue(from: $0) }), !singer.isEmpty {
+                    if profile.showSingerDance,
+                       let singer = state.currentTrack.flatMap({ profile.singerValue(from: $0) }),
+                       !singer.isEmpty {
                         Text(singer)
                             .font(profile.singerFont)
                             .foregroundColor(profile.singerSwiftUIColor)
