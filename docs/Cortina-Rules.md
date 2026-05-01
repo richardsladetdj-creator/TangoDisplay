@@ -44,6 +44,26 @@ Click the bin icon to the right of the genre entry.
 
 ---
 
+## Display label override
+
+Each denylist entry has an optional **display label** field. When filled in, the label is shown on the dancer screen instead of the raw genre tag.
+
+This is useful when your library uses compound genre tags like `Tango: Vals` or `Tango: Milonga` for correct organisation, but you want a cleaner label — just `Vals` or `Milonga` — displayed to dancers.
+
+**Example:**
+
+| Genre tag (in library) | Display label | Shown on screen |
+|---|---|---|
+| `Tango: Vals` | `Vals` | VALS |
+| `Tango: Milonga` | `Milonga` | MILONGA |
+| `Tango` | *(empty)* | TANGO |
+
+- Leave the field empty to show the raw genre tag as-is
+- The label applies in both the dance-track view and the cortina "Coming Up" preview
+- Detection logic is unaffected — the label is purely cosmetic
+
+---
+
 ## Notes
 
 > When both rules are enabled, a track is a cortina if either rule matches.

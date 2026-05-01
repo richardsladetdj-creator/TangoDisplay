@@ -9,7 +9,7 @@ A native macOS menu-bar app that shows a clean, fullscreen dancer display on an 
 ## Features
 
 - **Live track display** — artist, title, genre/label, year, and track counter (e.g. Track 2 of 4) on the dancer screen
-- **Cortina detection** — configurable allowlist (cortina genres) and denylist (dance genres) with partial matching; shows a "CORTINA" overlay automatically
+- **Cortina detection** — configurable allowlist (cortina genres) and denylist (dance genres) with partial matching; shows a "CORTINA" overlay automatically. Optional per-entry **display label** lets you show a clean label (e.g. `Vals`) instead of the raw genre tag (e.g. `Tango: Vals`)
 - **Coming-up preview** — displays the next tanda's genre and artist before it starts
 - **Multi-monitor support** — sends the presentation window to any connected display; move and toggle fullscreen from the control window
 - **Appearance profiles** — built-in (Classic, Modern, High Contrast) and unlimited custom profiles with per-field colors, fonts, and background image
@@ -45,7 +45,7 @@ A native macOS menu-bar app that shows a clean, fullscreen dancer display on an 
 ### Option A — Download pre-built app (easiest)
 
 1. Go to the [Releases](https://github.com/richardsladetdj-creator/TangoDisplay/releases) page
-2. Download `TangoDisplay-v2.4.0-universal.zip` (works on both Apple Silicon and Intel Macs)
+2. Download `TangoDisplay-v2.5.0-universal.zip` (works on both Apple Silicon and Intel Macs)
 3. Unzip and drag `TangoDisplay.app` to your `/Applications` folder
 4. **Right-click › Open** on first launch (required because the app is ad-hoc signed, not notarised)
 5. Grant the permissions macOS requests (see [Permissions](#permissions) below)
@@ -131,6 +131,9 @@ Key design decisions:
 ---
 
 ## Changelog
+
+### v2.5.0
+- **New (Cortina Rules):** Display label override for denylist genres. Each denylist entry now has an optional label field. When filled in, the label is shown on the dancer screen instead of the raw genre tag — useful for libraries that use compound genre tags like `Tango: Vals` or `Tango: Milonga` but want cleaner on-screen text. Applies to both the dance-track view and the cortina "Coming Up" preview. Detection logic is unaffected.
 
 ### v2.4.0
 - **New (Appearance):** Cortina track display. A new **Show cortina track during cortina** toggle in the Field Visibility section lets you display the playing cortina's own artist and/or title on the cortina screen. Two sub-toggles — **Cortina Artist** and **Cortina Title** — give independent control. Off by default; existing profiles migrate automatically.

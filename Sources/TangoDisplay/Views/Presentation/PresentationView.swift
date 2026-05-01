@@ -124,7 +124,8 @@ struct PresentationView: View {
         case .playing:
             PlayingView(
                 state: appState.displayState,
-                profile: activeProfile
+                profile: activeProfile,
+                settings: appState.settings
             )
         case .cortina:
             CortinaView(

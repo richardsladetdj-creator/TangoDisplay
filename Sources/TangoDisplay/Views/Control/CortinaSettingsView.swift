@@ -103,9 +103,26 @@ struct CortinaSettingsView: View {
         VStack(alignment: .leading, spacing: 10) {
             ForEach(settings.denylistGenres.indices, id: \.self) { idx in
                 let genre = settings.denylistGenres[idx]
-                HStack {
+                HStack(spacing: 12) {
                     Text(genre)
                         .font(.system(size: 13))
+                        .frame(width: 100, alignment: .leading)
+                    TextField(text: Binding(
+                        get: { settings.denylistLabelOverrides[genre] ?? "" },
+                        set: { newValue in
+                            let v = newValue.trimmingCharacters(in: .whitespaces)
+                            if v.isEmpty {
+                                settings.denylistLabelOverrides.removeValue(forKey: genre)
+                            } else {
+                                settings.denylistLabelOverrides[genre] = v
+                            }
+                        }
+                    ), prompt: Text("e.g. Your label").foregroundColor(.secondary)) {
+                        EmptyView()
+                    }
+                    .textFieldStyle(.roundedBorder)
+                    .font(.system(size: 13))
+                    .frame(width: 160)
                     Spacer()
                     Toggle("Partial match", isOn: Binding(
                         get: { settings.denylistPartialMatchGenres.contains(genre) },
@@ -118,6 +135,7 @@ struct CortinaSettingsView: View {
                         }
                     ))
                     .toggleStyle(.checkbox)
+                    .fixedSize()
                     .help("Also matches genres starting with \"\(genre) \" (e.g. \"\(genre) Instrumental\")")
                     Button {
                         settings.denylistGenres.remove(at: idx)
@@ -127,7 +145,7 @@ struct CortinaSettingsView: View {
                     .buttonStyle(.plain)
                 }
                 .padding(.horizontal, 6)
-                .padding(.vertical, 4)
+                .padding(.vertical, 6)
             }
             HStack {
                 TextField("e.g. Tango", text: $newDenylistGenre)

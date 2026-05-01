@@ -66,7 +66,7 @@ struct CortinaView: View {
                                 .foregroundColor(profile.nextUpLabelSwiftUIColor)
                         case .genre:
                             if profile.showGenreCortina, !next.genre.isEmpty {
-                                Text(next.genre)
+                                Text(settings.displayLabel(for: next.genre))
                                     .font(profile.genreFont)
                                     .foregroundColor(profile.genreSwiftUIColor)
                             }

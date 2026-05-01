@@ -41,6 +41,9 @@ final class AppSettings: ObservableObject {
             denylistPartialMatchGenres = denylistPartialMatchGenres.filter {
                 denylistGenres.contains($0)
             }
+            denylistLabelOverrides = denylistLabelOverrides.filter {
+                denylistGenres.contains($0.key)
+            }
         }
     }
     @Published var denylistPartialMatchGenres: Set<String> {
@@ -49,6 +52,13 @@ final class AppSettings: ObservableObject {
                 Array(denylistPartialMatchGenres).joined(separator: ","),
                 forKey: kPrefix + "denylistPartialMatchGenres"
             )
+        }
+    }
+    @Published var denylistLabelOverrides: [String: String] {
+        didSet {
+            if let data = try? JSONEncoder().encode(denylistLabelOverrides) {
+                UserDefaults.standard.set(data, forKey: kPrefix + "denylistLabelOverrides")
+            }
         }
     }
 
@@ -98,6 +108,12 @@ final class AppSettings: ObservableObject {
             denylistPartialMatchGenres = Set(AppSettings.parseGenres(
                 ud.string(forKey: kPrefix + "denylistGenres"), default: ["Tango", "Vals", "Milonga"]))
         }
+        if let data = ud.data(forKey: kPrefix + "denylistLabelOverrides"),
+           let overrides = try? JSONDecoder().decode([String: String].self, from: data) {
+            denylistLabelOverrides = overrides
+        } else {
+            denylistLabelOverrides = [:]
+        }
         let rawPlayer = ud.string(forKey: kPrefix + "selectedPlayer") ?? ""
         selectedPlayer = MusicPlayerChoice(rawValue: rawPlayer) ?? .musicApp
         if let idString = ud.string(forKey: kPrefix + "activeProfileID") {
@@ -120,6 +136,15 @@ final class AppSettings: ObservableObject {
     private static func parseGenres(_ raw: String?, default defaultValue: [String]) -> [String] {
         guard let raw, !raw.isEmpty else { return defaultValue }
         return raw.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+    }
+
+    func displayLabel(for genre: String) -> String {
+        let trimmed = genre.trimmingCharacters(in: .whitespaces)
+        if let match = denylistGenres.first(where: { $0.caseInsensitiveCompare(trimmed) == .orderedSame }),
+           let override = denylistLabelOverrides[match], !override.isEmpty {
+            return override
+        }
+        return trimmed
     }
 
     func makeDetector() -> CortinaDetector {

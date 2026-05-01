@@ -4,6 +4,7 @@ import TangoDisplayCore
 struct PlayingView: View {
     let state: DisplayState
     let profile: AppearanceProfile
+    @ObservedObject var settings: AppSettings
 
     var body: some View {
         VStack(spacing: 16) {
@@ -13,7 +14,7 @@ struct PlayingView: View {
                 switch item {
                 case .genre:
                     if profile.showGenreDance, let genre = state.currentTrack?.genre, !genre.isEmpty {
-                        Text(genre.uppercased())
+                        Text(settings.displayLabel(for: genre).uppercased())
                             .font(profile.genreFont)
                             .foregroundColor(profile.genreSwiftUIColor)
                             .multilineTextAlignment(.center)
