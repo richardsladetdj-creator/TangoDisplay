@@ -46,7 +46,7 @@ A native macOS menu-bar app that shows a clean, fullscreen dancer display on an 
 ### Option A — Download pre-built app (easiest)
 
 1. Go to the [Releases](https://github.com/richardsladetdj-creator/TangoDisplay/releases) page
-2. Download `TangoDisplay-v3.0.0-universal.zip` (works on both Apple Silicon and Intel Macs)
+2. Download `TangoDisplay-v3.0.1-universal.zip` (works on both Apple Silicon and Intel Macs)
 3. Unzip and drag `TangoDisplay.app` to your `/Applications` folder
 4. **Right-click › Open** on first launch (required because the app is ad-hoc signed, not notarised)
 5. Grant the permissions macOS requests (see [Permissions](#permissions) below)
@@ -132,6 +132,9 @@ Key design decisions:
 ---
 
 ## Changelog
+
+### v3.0.1
+- **Fix (Built-In Player):** iTunNORM replay-gain tags are no longer shown as the singer/comment line. These tags are embedded by iTunes/Music.app as a hex string in the Comments field; the built-in player now strips them so they do not appear on the dancer screen.
 
 ### v3.0.0
 - **New: Built-In Player** — TangoDisplay now includes a native audio player. No Music.app, Swinsian, or Embrace required. Build a setlist by dragging tracks from Finder, Music.app, or Swinsian; all display automation (cortina detection, tanda counting, coming-up preview, album artwork) works fully with the built-in player.
