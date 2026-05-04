@@ -95,12 +95,12 @@ This means a single accidental tap on the transport never kills the music.
 
 ### Fade Buttons (Cortina Controls)
 
-Two fade buttons give you smooth DJ-style transitions:
+The two fade buttons are enabled only when the currently playing track is a recognised cortina — they are never active on dance tracks. Use them when you want to end a cortina early rather than letting it play to its natural finish:
 
 | Button | What it does |
 |---|---|
-| **Fade & Stop** | Smoothly fades the volume to zero over the configured duration, then stops. Use this on the last track of a tanda to fade out into the cortina. |
-| **Fade & Continue** | Fades to zero, pauses briefly, then automatically advances to the next track and restores volume. Use this for a seamless crossfade between consecutive tracks. |
+| **Fade & Stop** | Smoothly fades the cortina volume to zero over the configured duration, then stops. |
+| **Fade & Continue** | Smoothly fades the cortina volume to zero, then immediately advances to the next track and restores volume. |
 
 Both buttons are disabled while a fade is already in progress. The fade uses an exponential curve for a natural, professional sound.
 
