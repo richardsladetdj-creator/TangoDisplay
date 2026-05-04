@@ -24,9 +24,84 @@ struct PlayerSettingsView: View {
                 Text("Notes")
                     .foregroundColor(ControlTheme.accent)
             }
+
+            if settings.selectedPlayer == .builtIn {
+                Section {
+                    LabeledContent("Main output:") {
+                        Picker("", selection: $settings.builtInOutputDeviceUID) {
+                            Text("System Default").tag("")
+                            ForEach(appState.availableAudioOutputDevices) { device in
+                                Text(device.name).tag(device.id)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        .fixedSize()
+                    }
+                    LabeledContent("Cortina fade") {
+                        HStack(spacing: 8) {
+                            Slider(value: $settings.builtInFadeDuration, in: 1...15, step: 0.5)
+                            Text("\(settings.builtInFadeDuration, specifier: "%.1f")s")
+                                .font(.system(size: 12, design: .monospaced))
+                                .frame(width: 36, alignment: .trailing)
+                        }
+                    }
+                    Text("Duration of the volume fade when using Fade & Stop or Fade & Continue.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+
+                    LabeledContent("Mark as played") {
+                        Picker("", selection: $settings.markAsPlayedAfterCompletion) {
+                            Text("After song ends").tag(true)
+                            Text("After...").tag(false)
+                        }
+                        .pickerStyle(.segmented)
+                        .fixedSize()
+                    }
+                    if !settings.markAsPlayedAfterCompletion {
+                        LabeledContent("") {
+                            HStack(spacing: 8) {
+                                Slider(
+                                    value: Binding(
+                                        get: { Double(settings.markAsPlayedAfterSeconds) },
+                                        set: { settings.markAsPlayedAfterSeconds = Int($0.rounded()) }
+                                    ),
+                                    in: 1...30,
+                                    step: 1
+                                )
+                                Text("\(settings.markAsPlayedAfterSeconds)s")
+                                    .font(.system(size: 12, design: .monospaced))
+                                    .frame(width: 36, alignment: .trailing)
+                            }
+                        }
+                    }
+                    Text("Controls when a track is marked as played. Once marked, resuming playback skips to the next track.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                } header: {
+                    Text("Built-in Player")
+                        .foregroundColor(ControlTheme.accent)
+                }
+
+                Section {
+                    Toggle("Title", isOn: .constant(true)).disabled(true)
+                    Toggle("Artist", isOn: .constant(true)).disabled(true)
+                    Toggle("Genre", isOn: .constant(true)).disabled(true)
+                    Toggle("Year", isOn: $settings.showYear)
+                    Toggle("Time", isOn: $settings.showTime)
+                    Toggle("Comments", isOn: $settings.showComments)
+                    Toggle("Album Artist", isOn: $settings.showAlbumArtist)
+                    Text("Controls which fields are shown in the setlist rows.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                } header: {
+                    Text("Track Info")
+                        .foregroundColor(ControlTheme.accent)
+                }
+            }
         }
         .formStyle(.grouped)
         .padding()
+        .onAppear { appState.refreshAudioOutputDeviceList() }
     }
 
     @ViewBuilder
@@ -70,6 +145,26 @@ struct PlayerSettingsView: View {
             } icon: {
                 Image(systemName: "checkmark.circle.fill")
                     .foregroundColor(.green)
+            }
+
+        case .builtIn:
+            VStack(alignment: .leading, spacing: 8) {
+                Label {
+                    Text("TangoDisplay plays audio directly. Build your setlist in the Setlist tab by dragging tracks from Music.app, Swinsian, or Finder.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                } icon: {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundColor(.green)
+                }
+                Label {
+                    Text("Fully integrated support.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                } icon: {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundColor(.green)
+                }
             }
         }
     }

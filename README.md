@@ -8,6 +8,7 @@ A native macOS menu-bar app that shows a clean, fullscreen dancer display on an 
 
 ## Features
 
+- **Built-In Player** — native audio player: build a setlist by dragging tracks from Finder, Music.app, or Swinsian; full playback controls with accidental-stop protection; Fade & Stop / Fade & Continue cortina transitions; 5-band EQ (±12 dB); audio output routing to any macOS device; setlist persists across restarts. No Music.app required.
 - **Live track display** — artist, title, genre/label, year, and track counter (e.g. Track 2 of 4) on the dancer screen
 - **Cortina detection** — configurable allowlist (cortina genres) and denylist (dance genres) with partial matching; shows a "CORTINA" overlay automatically. Optional per-entry **display label** lets you show a clean label (e.g. `Vals`) instead of the raw genre tag (e.g. `Tango: Vals`)
 - **Coming-up preview** — displays the next tanda's genre and artist before it starts
@@ -33,7 +34,7 @@ A native macOS menu-bar app that shows a clean, fullscreen dancer display on an 
 | Requirement | Detail |
 |---|---|
 | macOS | 13 Ventura or later (Intel and Apple Silicon) |
-| Music.app | Required when using Music.app as the player source (default). Must be running and playing from a playlist. |
+| Music.app | Required only when using Music.app as the player source. Not needed with the built-in player. Must be running and playing from a playlist. |
 | Swinsian | Required only if selecting Swinsian as the player source in Settings › Player. |
 | Embrace | Required only if selecting Embrace as the player source in Settings › Player. |
 | Xcode Command Line Tools | `xcode-select --install` — no full Xcode needed |
@@ -45,7 +46,7 @@ A native macOS menu-bar app that shows a clean, fullscreen dancer display on an 
 ### Option A — Download pre-built app (easiest)
 
 1. Go to the [Releases](https://github.com/richardsladetdj-creator/TangoDisplay/releases) page
-2. Download `TangoDisplay-v2.5.1-universal.zip` (works on both Apple Silicon and Intel Macs)
+2. Download `TangoDisplay-v3.0.0-universal.zip` (works on both Apple Silicon and Intel Macs)
 3. Unzip and drag `TangoDisplay.app` to your `/Applications` folder
 4. **Right-click › Open** on first launch (required because the app is ad-hoc signed, not notarised)
 5. Grant the permissions macOS requests (see [Permissions](#permissions) below)
@@ -131,6 +132,18 @@ Key design decisions:
 ---
 
 ## Changelog
+
+### v3.0.0
+- **New: Built-In Player** — TangoDisplay now includes a native audio player. No Music.app, Swinsian, or Embrace required. Build a setlist by dragging tracks from Finder, Music.app, or Swinsian; all display automation (cortina detection, tanda counting, coming-up preview, album artwork) works fully with the built-in player.
+- **New: Setlist management** — drag-and-drop track queue with playback state tracking (queued / playing / paused / played), drag-to-reorder, context-menu bulk actions, Stop After Playing marker, and automatic setlist persistence across restarts.
+- **New: Fade controls** — two one-click fade buttons: **Fade & Stop** (smooth fade to silence, then stop) and **Fade & Continue** (fade out, skip to next track, fade back in). Configurable fade duration (1–15 s, default 5 s). Ideal for cortina transitions.
+- **New: Accidental-stop protection** — stopping playback requires two deliberate clicks (arm → confirm within ~3 s) to prevent mis-clicks mid-tanda.
+- **New: 5-Band Equaliser** — ±12 dB per band (60 Hz low shelf, 250 Hz, 1 kHz, 4 kHz peaking, 12 kHz high shelf). Settings persist across sessions. One-click Flat reset.
+- **New: Audio output routing** — choose any macOS output device (e.g. a DJ audio interface) from Player Settings. Falls back to system default if the selected device disconnects.
+- **New: Track info toggles** — show or hide Year, Time, Comments, and Album Artist columns in setlist rows from Player Settings.
+- **New: Export to Apple Music** — export the current setlist to a new Apple Music playlist with one click from the setlist toolbar.
+- **New: Setlist footer** — live total duration and projected end time (e.g. "Ends ~23:45") calculated from remaining queued tracks.
+- **New: Show Setlist menu item** — jump directly to the Setlist tab from the menu bar icon.
 
 ### v2.5.1
 - **Fix (Cortina Rules):** Display label overrides now apply when a track genre matches a denylist entry via partial match (e.g. genre `Milonga (Alt)` with denylist entry `Milonga` + partial match on now correctly shows the label `Milonga` instead of the raw genre string).

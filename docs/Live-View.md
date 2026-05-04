@@ -1,6 +1,25 @@
 # Live View
 
-The **Live** section is the main control window. It shows what is currently playing, a live preview of the dancer display, and quick-action buttons.
+The control window is the central hub for TangoDisplay. It uses a sidebar for navigation with three sections:
+
+**Live**
+- **Live** — Status, preview, and quick-action buttons (this page)
+- **Setlist** — Built-in player queue and playback controls ([Built-In Player](Built-In-Player))
+
+**Settings**
+- **Cortina Rules** — Automatic cortina detection ([Cortina Rules](Cortina-Rules))
+- **Appearance** — Colors, fonts, and transitions ([Appearance](Appearance))
+- **Display** — Monitor and label settings ([Display Settings](Display-Settings))
+- **Player** — Player source selection and built-in player settings ([Built-In Player](Built-In-Player))
+
+**Profiles**
+- **Profiles** — Saved appearance profiles ([Profiles](Profiles))
+
+> The **Setlist** item is only active when Built-in Player is selected as the player source. Selecting it while using another source shows a prompt to switch.
+
+---
+
+The **Live** page shows what is currently playing, a live preview of the dancer display, and quick-action buttons.
 
 ![Live view](https://raw.githubusercontent.com/richardsladetdj-creator/TangoDisplay/main/docs/screenshots/live-view.png)
 
@@ -12,9 +31,11 @@ At the bottom of the preview area:
 
 | Indicator | Meaning |
 |---|---|
-| **Playing** (green) | Music.app is playing a track |
+| **Playing** (green) | A track is currently playing |
 | **Polling OK** (green) | TangoDisplay successfully read track data on the last poll |
 | **Paused** | The display is manually paused (dancer screen is frozen) |
+
+> When using the Built-in Player, status reflects local playback state rather than Music.app polling. The "Polling OK" indicator is not shown in this mode.
 
 ---
 

@@ -5,9 +5,10 @@ import TangoDisplayCore
 // MARK: - Player choice
 
 enum MusicPlayerChoice: String, CaseIterable, Identifiable {
-    case musicApp = "musicApp"
-    case swinsian = "swinsian"
-    case embrace  = "embrace"
+    case musicApp  = "musicApp"
+    case swinsian  = "swinsian"
+    case embrace   = "embrace"
+    case builtIn   = "builtIn"
 
     var id: String { rawValue }
 
@@ -16,6 +17,7 @@ enum MusicPlayerChoice: String, CaseIterable, Identifiable {
         case .musicApp: return "Music.app"
         case .swinsian: return "Swinsian"
         case .embrace:  return "Embrace"
+        case .builtIn:  return "Built-in Player"
         }
     }
 }
@@ -40,9 +42,21 @@ protocol MusicPlayerSource: AnyObject {
     func triggerPlaylistFetch()
     /// Fetches album artwork for the given track. Returns nil when unavailable.
     func fetchArtwork(for track: Track) async -> NSImage?
+    // Transport controls — no-op defaults in extension; LocalPlayerSource overrides all five.
+    func play()
+    func pause()
+    func skipNext()
+    func skipPrevious()
+    func seek(to seconds: Double)
 }
 
 extension MusicPlayerSource {
     var supportsPlaylist: Bool { true }
+    var isTransportControllable: Bool { false }
     func fetchArtwork(for track: Track) async -> NSImage? { nil }
+    func play() {}
+    func pause() {}
+    func skipNext() {}
+    func skipPrevious() {}
+    func seek(to seconds: Double) {}
 }

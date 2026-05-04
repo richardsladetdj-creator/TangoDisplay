@@ -77,3 +77,19 @@ This is useful when your library uses compound genre tags like `Tango: Vals` or 
 - If cortinas in your library have no genre set, enable the denylist rule and ensure all your tango genres are listed — any untagged track will then be treated as a cortina.
 - If you use a dedicated "Cortina" genre, the allowlist rule alone is sufficient.
 - You can enable both for belt-and-braces detection.
+
+---
+
+## Auto-Fade with the Built-in Player
+
+When using the **Built-in Player**, your cortina rules drive the fade controls in the Setlist view.
+
+As you approach the end of a tanda, click one of the two fade buttons in the player controls:
+
+**Fade & Stop** — fades the current track's volume to zero over the configured duration, then stops playback. Trigger it as the last tanda track plays out so dancers hear a smooth fade rather than an abrupt cut.
+
+**Fade & Continue** — fades to zero, then after a brief pause automatically advances to the next track and restores volume. Use this for a seamless handoff into a cortina track.
+
+TangoDisplay applies your cortina rules to every setlist track in real time, so the "Coming Up" preview on the dancer display updates correctly as soon as the cortina begins playing.
+
+Configure the fade duration (1–15 seconds) in **Player › Cortina fade**.

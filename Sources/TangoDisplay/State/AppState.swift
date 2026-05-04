@@ -1,7 +1,10 @@
+import CoreAudio
 import Foundation
 import AppKit
 import Combine
 import TangoDisplayCore
+
+enum FadeMode: Equatable { case none, fadeAndStop, fadeAndContinue }
 
 @MainActor
 final class AppState: ObservableObject {
@@ -11,6 +14,7 @@ final class AppState: ObservableObject {
     @Published private(set) var displayState = DisplayState()
     @Published private(set) var watchdogActive = false
     @Published private(set) var availableDisplays: [DisplayInfo] = []
+    @Published private(set) var availableAudioOutputDevices: [AudioOutputDevice] = []
     @Published private(set) var debugLog: [String] = []
     /// Transient override set by AppearanceSettingsView while editing.
     /// Non-nil only while the Appearance tab is visible; cleared on disappear.
@@ -32,12 +36,17 @@ final class AppState: ObservableObject {
     let settings = AppSettings()
     let profileStore = ProfileStore()
     let versionChecker = VersionChecker()
+    let setlist = SetlistManager()
     private var activeSource: any MusicPlayerSource = MusicPoller()  // replaced in start()
     private var cancellables = Set<AnyCancellable>()
+
+    var localPlayer: LocalPlayerSource? { activeSource as? LocalPlayerSource }
 
     // MARK: - Internal state
 
     private var artworkCache: [String: NSImage] = [:]  // keyed by persistentID
+    private var artworkCacheKeys: [String] = []        // insertion-order for LRU eviction
+    private let artworkCacheMaxSize = 20
     private var trackHistory: [Track] = []           // cleared on each cortina/idle
     private var playlistTracks: [Track]? = nil       // last known playlist; nil = unavailable
     private var playlistCurrentIndex: Int = 0        // 0-based
@@ -47,6 +56,10 @@ final class AppState: ObservableObject {
     @Published private(set) var currentPlayerState: PlayerState = .stopped
     private var isPausedByUser = false               // ⌘⇧P toggle
     private var pendingStateBeforePause: DisplayState? = nil  // state snapshot for unpausing
+    private var pauseArmTask: Task<Void, Never>?     // Embrace-style pause confirmation timer
+    @Published private(set) var fadeMode: FadeMode = .none
+    private var fadeTask: Task<Void, Never>?
+    private var preFadeVolume: Float = 1.0
     var isDisplayPausedByUser: Bool { isPausedByUser }
     var activeSourceSupportsPlaylist: Bool { activeSource.supportsPlaylist }
 
@@ -55,6 +68,8 @@ final class AppState: ObservableObject {
     init() {
         refreshDisplayList()
         registerForScreenChanges()
+        refreshAudioOutputDeviceList()
+        registerForAudioDeviceChanges()
         // Forward nested ObservableObject changes so PresentationView re-renders
         settings.objectWillChange
             .sink { [weak self] _ in self?.objectWillChange.send() }
@@ -68,7 +83,7 @@ final class AppState: ObservableObject {
     // MARK: - Lifecycle
 
     func start() {
-        activeSource = AppState.makeSource(for: settings.selectedPlayer)
+        activeSource = makeSource(for: settings.selectedPlayer)
         wireCallbacks(to: activeSource)
         activeSource.start()
         versionChecker.startPeriodicChecks()
@@ -80,11 +95,12 @@ final class AppState: ObservableObject {
 
     // MARK: - Source management
 
-    private static func makeSource(for choice: MusicPlayerChoice) -> any MusicPlayerSource {
+    private func makeSource(for choice: MusicPlayerChoice) -> any MusicPlayerSource {
         switch choice {
         case .musicApp: return MusicPoller()
         case .swinsian: return SwinsianMonitor()
         case .embrace:  return EmbracMonitor()
+        case .builtIn:  return LocalPlayerSource(setlist: setlist, settings: settings, volume: settings.builtInVolume)
         }
     }
 
@@ -126,14 +142,29 @@ final class AppState: ObservableObject {
     private func switchSource(to choice: MusicPlayerChoice) {
         activeSource.stop()
         resetTransientState()
-        let newSource = AppState.makeSource(for: choice)
+        let newSource = makeSource(for: choice)
         wireCallbacks(to: newSource)
         activeSource = newSource
         activeSource.start()
         appendDebugLog("Switched player to \(choice.displayName)")
     }
 
+    private func cancelPauseArm() {
+        pauseArmTask?.cancel()
+        pauseArmTask = nil
+    }
+
+    func cancelFade() {
+        guard fadeMode != .none else { return }
+        fadeTask?.cancel()
+        fadeTask = nil
+        localPlayer?.volume = preFadeVolume
+        fadeMode = .none
+    }
+
     private func resetTransientState() {
+        cancelPauseArm()
+        cancelFade()
         trackHistory.removeAll()
         playlistTracks = nil
         playlistCurrentIndex = 0
@@ -156,8 +187,24 @@ final class AppState: ObservableObject {
         // Skip duplicate polls — but allow through if track metadata changed (e.g. albumArtist enrichment)
         let pid = track?.persistentID ?? ""
         guard pid != lastSeenPersistentID || playerState != currentPlayerState || track != lastSeenTrack else { return }
+
+        // Cancel any in-progress fade if the track changed externally
+        if fadeMode != .none && pid != lastSeenPersistentID {
+            cancelFade()
+        }
+
         lastSeenPersistentID = pid
         lastSeenTrack = track
+
+        // Protect the armed state from being overwritten by periodic .playing callbacks.
+        if currentPlayerState == .pauseArmed {
+            if playerState == .playing && pid == lastSeenPersistentID {
+                lastSeenTrack = track
+                return
+            }
+            cancelPauseArm()   // track changed or stopped while armed — disarm silently
+        }
+
         currentPlayerState = playerState
 
         // Stopped
@@ -382,6 +429,86 @@ final class AppState: ObservableObject {
         }
     }
 
+    // MARK: - Transport passthrough (built-in player only)
+
+    func transportPlay()  { activeSource.play() }
+
+    func transportPause() {
+        switch currentPlayerState {
+        case .playing:
+            currentPlayerState = .pauseArmed
+            pauseArmTask?.cancel()
+            pauseArmTask = Task { @MainActor [weak self] in
+                try? await Task.sleep(for: .seconds(3))
+                guard let self, !Task.isCancelled else { return }
+                if self.currentPlayerState == .pauseArmed {
+                    self.currentPlayerState = .playing
+                }
+            }
+        case .pauseArmed:
+            cancelPauseArm()
+            activeSource.pause()
+        default:
+            break
+        }
+    }
+
+    func transportStop()           { cancelFade(); localPlayer?.stopTrack() }
+    func transportSkipNext()       { cancelFade(); cancelPauseArm(); activeSource.skipNext() }
+    func transportSkipPrevious()   { cancelFade(); cancelPauseArm(); activeSource.skipPrevious() }
+    func transportSeek(to s: Double) { activeSource.seek(to: s) }
+
+    func transportFadeAndStop() {
+        if fadeMode == .fadeAndStop { cancelFade(); return }
+        guard displayState.mode == .cortina, let player = localPlayer else { return }
+        preFadeVolume = player.volume
+        fadeMode = .fadeAndStop
+        fadeTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            await self.performFade(player: player)
+            guard !Task.isCancelled, self.fadeMode == .fadeAndStop else { return }
+            self.fadeMode = .none
+            player.volume = self.preFadeVolume
+            self.localPlayer?.stopTrack()
+        }
+    }
+
+    func transportFadeAndContinue() {
+        if fadeMode == .fadeAndContinue { cancelFade(); return }
+        guard displayState.mode == .cortina, let player = localPlayer else { return }
+        preFadeVolume = player.volume
+        fadeMode = .fadeAndContinue
+        fadeTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            await self.performFade(player: player)
+            guard !Task.isCancelled, self.fadeMode == .fadeAndContinue else { return }
+            try? await Task.sleep(for: .seconds(1.0))
+            guard !Task.isCancelled, self.fadeMode == .fadeAndContinue else { return }
+            self.fadeMode = .none
+            player.volume = self.preFadeVolume
+            self.cancelPauseArm()
+            self.activeSource.skipNext()
+        }
+    }
+
+    private func performFade(player: LocalPlayerSource) async {
+        let startVolume = player.volume
+        let steps = 200
+        let interval = settings.builtInFadeDuration / Double(steps)
+        for i in 1...steps {
+            try? await Task.sleep(for: .seconds(interval))
+            guard !Task.isCancelled else { return }
+            let t = Double(i) / Double(steps)
+            player.volume = startVolume * Float(pow(1.0 - t, 2.0))
+        }
+        player.volume = 0
+    }
+
+    func syncVolume(_ v: Float) {
+        settings.builtInVolume = v
+        localPlayer?.volume = v
+    }
+
     // MARK: - Display list
 
     func refreshDisplayList() {
@@ -404,6 +531,25 @@ final class AppState: ObservableObject {
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
                 self?.refreshDisplayList()
+            }
+        }
+    }
+
+    // MARK: - Audio output device list
+
+    func refreshAudioOutputDeviceList() {
+        availableAudioOutputDevices = AudioDeviceManager.outputDevices()
+    }
+
+    private func registerForAudioDeviceChanges() {
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDevices,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        AudioObjectAddPropertyListenerBlock(AudioObjectID(kAudioObjectSystemObject), &address, nil) { [weak self] _, _ in
+            Task { @MainActor [weak self] in
+                self?.refreshAudioOutputDeviceList()
             }
         }
     }
@@ -433,7 +579,13 @@ final class AppState: ObservableObject {
             let img = await source.fetchArtwork(for: track)
             guard let self, self.displayedArtworkTrackID == pid else { return }
             if let img {
+                self.artworkCacheKeys.removeAll { $0 == pid }
+                self.artworkCacheKeys.append(pid)
                 self.artworkCache[pid] = img
+                if self.artworkCacheKeys.count > self.artworkCacheMaxSize {
+                    let evict = self.artworkCacheKeys.removeFirst()
+                    self.artworkCache.removeValue(forKey: evict)
+                }
                 self.currentArtwork = img
             }
         }

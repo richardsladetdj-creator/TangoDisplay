@@ -88,6 +88,12 @@ struct AppearanceSettingsView: View {
             } header: {
                 Text("Field Visibility")
                     .foregroundColor(ControlTheme.accent)
+            } footer: {
+                Label {
+                    Text("Controls which fields appear on the display. The Cortina column applies when 'Show next track during cortina' is enabled.")
+                } icon: {
+                    Image(systemName: "info.circle")
+                }
             }
 
             Section {
@@ -265,6 +271,12 @@ struct AppearanceSettingsView: View {
             } header: {
                 Text("Text Order")
                     .foregroundColor(ControlTheme.accent)
+            } footer: {
+                Label {
+                    Text("Sets the display order only. Use Field Visibility to show or hide individual fields.")
+                } icon: {
+                    Image(systemName: "info.circle")
+                }
             }
 
             Section {

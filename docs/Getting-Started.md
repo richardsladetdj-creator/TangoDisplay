@@ -3,8 +3,8 @@
 ## System requirements
 
 - macOS 13 Ventura or later
-- Music.app running with a named playlist
 - An external monitor for the dancer display (optional but recommended)
+- Music.app — only required when using the Music.app, Swinsian, or Embrace player sources. Not needed with the built-in player.
 
 ---
 
@@ -13,7 +13,7 @@
 ### Option A — Download (easiest)
 
 1. Go to the [Releases](https://github.com/richardsladetdj-creator/TangoDisplay/releases) page
-2. Download `TangoDisplay-v2.0.1.zip`
+2. Download `TangoDisplay-v3.0.0-universal.zip`
 3. Unzip and drag `TangoDisplay.app` to `/Applications`
 4. **Right-click › Open** on first launch — macOS will warn that the app isn't notarised; click **Open** to proceed
 
@@ -43,18 +43,19 @@ Click the icon to reveal the menu:
 
 - **Show Display Window** — brings the presentation window to the front
 - **Show Settings Window** — opens the main control window
+- **Show Setlist** — opens the control window and jumps directly to the Setlist tab
 - **Quit TangoDisplay** — exits the app
 
 ---
 
 ## Permissions
 
-macOS will ask for two permissions on first use:
+macOS may ask for up to two permissions depending on which features you use:
 
 | Permission | When | Why |
 |---|---|---|
-| **Automation › Music** | First poll | TangoDisplay reads the currently playing track, artist, genre, playlist position, and upcoming tracks via AppleScript |
-| **Input Monitoring** | First hotkey use | Required so global keyboard shortcuts (`⌘⇧O`, `⌘⇧P`, `⌘⇧R`) work while other apps are in focus |
+| **Automation › Music** | First poll (Music.app, Swinsian, or Embrace sources only) | TangoDisplay reads the currently playing track, artist, genre, playlist position, and upcoming tracks via AppleScript. Not required when using the Built-in Player. |
+| **Input Monitoring** | First hotkey use | Required so global keyboard shortcuts (`⌘⇧O`, `⌘⇧P`, `⌘⇧R`) work while other apps are in focus. |
 
 To grant Input Monitoring manually: **System Settings › Privacy & Security › Input Monitoring → enable TangoDisplay**.
 
@@ -65,5 +66,6 @@ To grant Input Monitoring manually: **System Settings › Privacy & Security ›
 ## Next steps
 
 - [Live View](Live-View) — understand the control window
+- [Built-In Player](Built-In-Player) — set up the native setlist and audio player
 - [Display Settings](Display-Settings) — choose your monitor and go fullscreen
 - [Appearance](Appearance) — customise colors, fonts, and background

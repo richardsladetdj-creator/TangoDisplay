@@ -4,6 +4,7 @@ import SwiftUI
 
 enum SidebarItem: String, Hashable, CaseIterable {
     case live
+    case setlist
     case cortinaRules
     case appearance
     case display
@@ -13,6 +14,7 @@ enum SidebarItem: String, Hashable, CaseIterable {
     var label: String {
         switch self {
         case .live:          return "Live"
+        case .setlist:       return "Setlist"
         case .cortinaRules:  return "Cortina Rules"
         case .appearance:    return "Appearance"
         case .display:       return "Display"
@@ -24,6 +26,7 @@ enum SidebarItem: String, Hashable, CaseIterable {
     var icon: String {
         switch self {
         case .live:          return "play.circle.fill"
+        case .setlist:       return "list.number"
         case .cortinaRules:  return "music.note"
         case .appearance:    return "paintbrush"
         case .display:       return "display"
@@ -34,9 +37,9 @@ enum SidebarItem: String, Hashable, CaseIterable {
 
     var section: String {
         switch self {
-        case .live:                               return "Live"
+        case .live, .setlist:                             return "Live"
         case .cortinaRules, .appearance, .display, .player: return "Settings"
-        case .profiles:                           return "Profiles"
+        case .profiles:                                   return "Profiles"
         }
     }
 }
@@ -95,6 +98,11 @@ struct ControlView: View {
         ) { _ in
             appState.appendDebugLog("⚠ Global hotkeys require Input Monitoring in System Settings › Privacy & Security")
         }
+        .onReceive(
+            NotificationCenter.default.publisher(for: .navigateToSetlist)
+        ) { _ in
+            selectedItem = .setlist
+        }
     }
 
     // MARK: - Sidebar
@@ -119,6 +127,7 @@ struct ControlView: View {
         List(selection: selectionBinding) {
             Section("Live") {
                 sidebarRow(.live)
+                sidebarRow(.setlist)
             }
             Section("Settings") {
                 sidebarRow(.cortinaRules)
@@ -152,6 +161,8 @@ struct ControlView: View {
         switch selectedItem {
         case .live, .none:
             liveView
+        case .setlist:
+            setlistView
         case .cortinaRules:
             CortinaSettingsView()
                 .environmentObject(appState)
@@ -187,6 +198,27 @@ struct ControlView: View {
             .frame(minWidth: 380)
         }
     }
+
+    @ViewBuilder
+    private var setlistView: some View {
+        if let lp = appState.localPlayer {
+            SetlistView(setlist: appState.setlist, player: lp)
+                .environmentObject(appState)
+        } else {
+            VStack(spacing: 12) {
+                Image(systemName: "list.number")
+                    .font(.system(size: 44))
+                    .foregroundColor(.secondary)
+                Text("Switch to Built-in Player to use the setlist")
+                    .foregroundColor(.secondary)
+                Button("Switch to Built-in Player") {
+                    appState.settings.selectedPlayer = .builtIn
+                }
+                .buttonStyle(.bordered)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
 }
 
 // MARK: - Notification names
@@ -194,6 +226,7 @@ struct ControlView: View {
 extension Notification.Name {
     static let showOverrideDialog = Notification.Name("com.tangodisplay.showOverrideDialog")
     static let hotkeyPermissionRequired = Notification.Name("com.tangodisplay.hotkeyPermissionRequired")
+    static let navigateToSetlist = Notification.Name("com.tangodisplay.navigateToSetlist")
 }
 
 // MARK: - Control window accessor

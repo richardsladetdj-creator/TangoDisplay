@@ -41,6 +41,14 @@ final class MenuBarController {
         showSettings.target = self
         menu.addItem(showSettings)
 
+        let showSetlist = NSMenuItem(
+            title: "Show Setlist",
+            action: #selector(showSetlistWindow),
+            keyEquivalent: ""
+        )
+        showSetlist.target = self
+        menu.addItem(showSetlist)
+
         menu.addItem(.separator())
 
         let quit = NSMenuItem(
@@ -63,7 +71,19 @@ final class MenuBarController {
         WindowManager.showControlWindow()
     }
 
+    @objc private func showSetlistWindow() {
+        WindowManager.showControlWindow()
+        NotificationCenter.default.post(name: .navigateToSetlist, object: nil)
+    }
+
     @objc private func quitApp() {
+        let alert = NSAlert()
+        alert.messageText = "Quit TangoDisplay?"
+        alert.informativeText = "Are you sure you want to quit TangoDisplay?"
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "Quit")
+        alert.addButton(withTitle: "Cancel")
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
         NSApp.terminate(nil)
     }
 }

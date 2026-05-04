@@ -5,7 +5,7 @@ import TangoDisplayCore
 // MARK: - PlayerState
 
 enum PlayerState: String, Equatable {
-    case playing, paused, stopped
+    case playing, pauseArmed, paused, stopped
 }
 
 // MARK: - AppleScriptBridge
@@ -273,5 +273,64 @@ final class AppleScriptBridge {
         guard currentIndex <= tracks.count else { return nil }
 
         return (tracks: tracks, currentIndex: currentIndex - 1) // convert to 0-based
+    }
+}
+
+// MARK: - Setlist export
+
+/// Creates a new user playlist in Music.app and adds each file URL to it.
+/// Runs the AppleScript on a background queue; calls `completion` on the main queue.
+func createAppleMusicPlaylist(
+    name: String,
+    fileURLs: [URL],
+    completion: @escaping (Result<Void, Error>) -> Void
+) {
+    DispatchQueue.global(qos: .utility).async {
+        func escaped(_ s: String) -> String {
+            s.replacingOccurrences(of: "\\", with: "\\\\")
+             .replacingOccurrences(of: "\"", with: "\\\"")
+        }
+
+        let addLines = fileURLs
+            .map { "            add POSIX file \"\(escaped($0.path))\" to thePlaylist" }
+            .joined(separator: "\n")
+
+        let source = """
+            tell application "Music"
+                try
+                    set thePlaylist to make new user playlist with properties {name: "\(escaped(name))"}
+            \(addLines)
+                    return "ok"
+                on error errMsg
+                    return "error:" & errMsg
+                end try
+            end tell
+            """
+
+        var errorInfo: NSDictionary?
+        guard let script = NSAppleScript(source: source) else {
+            DispatchQueue.main.async {
+                completion(.failure(NSError(domain: "TangoDisplay", code: 10,
+                    userInfo: [NSLocalizedDescriptionKey: "Failed to create AppleScript"])))
+            }
+            return
+        }
+        let result = script.executeAndReturnError(&errorInfo)
+
+        DispatchQueue.main.async {
+            if let errorInfo {
+                let msg = errorInfo[NSAppleScript.errorMessage] as? String ?? "Unknown AppleScript error"
+                completion(.failure(NSError(domain: "TangoDisplay", code: 10,
+                    userInfo: [NSLocalizedDescriptionKey: msg])))
+                return
+            }
+            let returnVal = result.stringValue ?? ""
+            if returnVal.hasPrefix("error:") {
+                completion(.failure(NSError(domain: "TangoDisplay", code: 11,
+                    userInfo: [NSLocalizedDescriptionKey: String(returnVal.dropFirst(6))])))
+            } else {
+                completion(.success(()))
+            }
+        }
     }
 }

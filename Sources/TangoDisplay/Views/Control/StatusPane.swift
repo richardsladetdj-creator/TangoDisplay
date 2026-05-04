@@ -70,14 +70,16 @@ struct StatusPane: View {
 
     private var playerBadge: some View {
         let color: Color = switch appState.currentPlayerState {
-        case .playing: .green
-        case .paused:  .orange
-        case .stopped: .gray
+        case .playing:    .green
+        case .pauseArmed: .red
+        case .paused:     .orange
+        case .stopped:    .gray
         }
         let label: String = switch appState.currentPlayerState {
-        case .playing: "Playing"
-        case .paused:  "Player Paused"
-        case .stopped: "Idle"
+        case .playing:    "Playing"
+        case .pauseArmed: "Pause Armed"
+        case .paused:     "Player Paused"
+        case .stopped:    "Idle"
         }
         return badge(label: label, color: color)
     }
