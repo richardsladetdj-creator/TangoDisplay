@@ -89,7 +89,17 @@ final class LocalPlayerSource: NSObject, ObservableObject, MusicPlayerSource {
     @objc private func handleEngineConfigChange() {
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
-            try? self.audioEngine.start()
+            if let file = self.audioFile {
+                self.audioEngine.disconnectNodeOutput(self.playerNode)
+                self.audioEngine.disconnectNodeOutput(self.eq)
+                self.audioEngine.connect(self.playerNode, to: self.eq, format: file.processingFormat)
+                self.audioEngine.connect(self.eq, to: self.audioEngine.mainMixerNode, format: file.processingFormat)
+            }
+            do {
+                try self.audioEngine.start()
+            } catch {
+                os_log(.error, "TangoDisplay: engine restart failed: %{public}@", error.localizedDescription)
+            }
             guard self.audioFile != nil else { return }
             self.seekTo(self.elapsed)
             if self.isActivePlaying { self.playerNode.play() }
@@ -327,6 +337,15 @@ final class LocalPlayerSource: NSObject, ObservableObject, MusicPlayerSource {
             seekOffset = 0
             elapsed = 0
             duration = Double(file.length) / file.fileFormat.sampleRate
+            // scheduleFile requires the file format to exactly match the output bus format.
+            // Stop the engine before reconnecting so the graph is in a clean state; a mono
+            // AIFF scheduled against the stereo-defaulted startup connection produces silence.
+            audioEngine.stop()
+            audioEngine.disconnectNodeOutput(playerNode)
+            audioEngine.disconnectNodeOutput(eq)
+            audioEngine.connect(playerNode, to: eq, format: file.processingFormat)
+            audioEngine.connect(eq, to: audioEngine.mainMixerNode, format: file.processingFormat)
+            try audioEngine.start()
             playerNode.scheduleFile(file, at: nil) { [weak self] in
                 DispatchQueue.main.async { self?.handleTrackEnd(generation: gen) }
             }

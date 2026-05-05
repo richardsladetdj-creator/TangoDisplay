@@ -46,7 +46,7 @@ A native macOS menu-bar app that shows a clean, fullscreen dancer display on an 
 ### Option A — Download pre-built app (easiest)
 
 1. Go to the [Releases](https://github.com/richardsladetdj-creator/TangoDisplay/releases) page
-2. Download `TangoDisplay-v3.0.2-universal.zip` (works on both Apple Silicon and Intel Macs)
+2. Download `TangoDisplay-v3.0.3-universal.zip` (works on both Apple Silicon and Intel Macs)
 3. Unzip and drag `TangoDisplay.app` to your `/Applications` folder
 4. **Right-click › Open** on first launch (required because the app is ad-hoc signed, not notarised)
 5. Grant the permissions macOS requests (see [Permissions](#permissions) below)
@@ -132,6 +132,9 @@ Key design decisions:
 ---
 
 ## Changelog
+
+### v3.0.3
+- **Fix (Built-In Player):** AIFF and Apple Lossless tracks no longer play silently when they are the first tracks in a setlist. The root cause was a channel-count mismatch: `AVAudioPlayerNode.scheduleFile` requires the file's format to exactly match the output bus channel count, but at startup the bus defaulted to stereo (2 ch). A mono AIFF (1 ch) mismatched this connection and produced silence with no error. Each time a track is loaded, the engine now stops, reconnects `playerNode → EQ → mixer` with the file's actual processing format, and restarts before scheduling — ensuring the bus always matches the file.
 
 ### v3.0.2
 - **Fix (Built-In Player):** AIFF and Apple Lossless tracks no longer play silently when they are the first tracks in a setlist. Scheduling a PCM-format file triggers an `AVAudioEngineConfigurationChange` notification on AVAudioEngine's internal thread; the handler now dispatches to the main thread so it always runs after `isActivePlaying` is set, correctly rescheduling audio and resuming playback.
