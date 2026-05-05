@@ -100,6 +100,7 @@ final class AppState: ObservableObject {
         case .musicApp: return MusicPoller()
         case .swinsian: return SwinsianMonitor()
         case .embrace:  return EmbracMonitor()
+        case .jriver:   return JRiverPoller()
         case .builtIn:  return LocalPlayerSource(setlist: setlist, settings: settings, volume: settings.builtInVolume)
         }
     }
@@ -379,7 +380,12 @@ final class AppState: ObservableObject {
             if let tracks = playlistTracks,
                let idx = tracks.firstIndex(where: { $0.persistentID == currentTrack.persistentID }) {
                 playlistCurrentIndex = idx
-                displayState.nextTrack = findNextDanceTrack(after: idx, detector: detector)
+                var nextFromPlaylist = findNextDanceTrack(after: idx, detector: detector)
+                if let np = nextFromPlaylist, let known = lastKnownNextTrack,
+                   np.persistentID == known.persistentID {
+                    nextFromPlaylist = known
+                }
+                displayState.nextTrack = nextFromPlaylist
             } else {
                 displayState.nextTrack = nil
             }

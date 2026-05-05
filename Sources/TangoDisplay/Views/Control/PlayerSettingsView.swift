@@ -147,6 +147,26 @@ struct PlayerSettingsView: View {
                     .foregroundColor(.green)
             }
 
+        case .jriver:
+            VStack(alignment: .leading, spacing: 8) {
+                Label {
+                    Text("Polls JRiver Media Center every 2 seconds via its MCWS HTTP API. Playlist look-ahead and tanda counting are fully supported.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                } icon: {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundColor(.green)
+                }
+                Label {
+                    Text("JRiver must be running with Media Network enabled (Tools → Options → Media Network). Connects to 127.0.0.1 on the default MCWS port.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                } icon: {
+                    Image(systemName: "info.circle")
+                        .foregroundColor(.secondary)
+                }
+            }
+
         case .builtIn:
             VStack(alignment: .leading, spacing: 8) {
                 Label {
