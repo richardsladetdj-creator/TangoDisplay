@@ -112,6 +112,24 @@ struct PlayerSettingsView: View {
                     Text("Warns before adding a track that is already in the setlist.")
                         .font(.caption)
                         .foregroundColor(.secondary)
+                    Toggle("Auto-gap", isOn: $settings.autoGapEnabled)
+                    if settings.autoGapEnabled {
+                        LabeledContent("Minimum gap") {
+                            HStack(spacing: 8) {
+                                Slider(value: $settings.autoGapDuration, in: 0.5...5, step: 0.5)
+                                Text("\(settings.autoGapDuration, specifier: "%.1f")s")
+                                    .font(.system(size: 12, design: .monospaced))
+                                    .frame(width: 36, alignment: .trailing)
+                            }
+                        }
+                        Toggle("Skip gap before first track", isOn: $settings.autoGapIgnoreFirstTrack)
+                        Text("The first track in the setlist starts immediately with no silence preroll.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    Text("Analyzes silence at track boundaries and adds padding so the gap between tracks meets the minimum. Only adds silence, never removes it.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
                 } header: {
                     Text("Built-in Player")
                         .foregroundColor(ControlTheme.accent)

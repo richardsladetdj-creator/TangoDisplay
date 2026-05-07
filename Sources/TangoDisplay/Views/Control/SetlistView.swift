@@ -155,8 +155,12 @@ struct SetlistView: View {
     }
 
     private var trackList: some View {
-        List(selection: $selectedIDs) {
+        let firstID = setlist.entries.first?.id
+        let nonePlayedYet = !setlist.entries.contains(where: { $0.state == .played })
+        let isIgnoringFirstTrack = settings.autoGapEnabled && settings.autoGapIgnoreFirstTrack
+        return List(selection: $selectedIDs) {
             ForEach(setlist.entries) { entry in
+                let wouldSkipAutoGap = isIgnoringFirstTrack && nonePlayedYet && entry.state == .queued && entry.id == firstID
                 SetlistRowView(
                     entry: entry,
                     isStopAfter: entry.id == setlist.stopAfterEntryID,
@@ -165,7 +169,8 @@ struct SetlistView: View {
                     showYear: settings.showYear,
                     showTime: settings.showTime,
                     showComments: settings.showComments,
-                    showAlbumArtist: settings.showAlbumArtist
+                    showAlbumArtist: settings.showAlbumArtist,
+                    wouldSkipAutoGap: wouldSkipAutoGap
                 )
                 .tag(entry.id)
                 .moveDisabled(entry.state == .played)
@@ -196,6 +201,12 @@ struct SetlistView: View {
                             setlist.stopAfterEntryID = (setlist.stopAfterEntryID == id) ? nil : id
                         } label: {
                             Text(setlist.stopAfterEntryID == id ? "Resume after Playing" : "Stop after Playing")
+                        }
+                        if let entry = setlist.entries.first(where: { $0.id == id }),
+                           entry.state == .queued || entry.state == .paused {
+                            Button(entry.ignoresAutoGap ? "Resume Auto-gap" : "Ignore Auto-gap before this Track") {
+                                setlist.toggleIgnoresAutoGap(id: id)
+                            }
                         }
                     }
                     Divider()
@@ -365,6 +376,7 @@ private struct StatusBarView: View {
     @ObservedObject var player: LocalPlayerSource
     @ObservedObject var setlist: SetlistManager
     @EnvironmentObject var appState: AppState
+    @EnvironmentObject var settings: AppSettings
 
     var body: some View {
         HStack {
@@ -374,6 +386,17 @@ private struct StatusBarView: View {
             }
             .font(.system(size: 11))
             .foregroundColor(.secondary)
+
+            Spacer()
+
+            HStack(spacing: 4) {
+                Circle()
+                    .fill(settings.autoGapEnabled ? Color.green : Color.secondary)
+                    .frame(width: 6, height: 6)
+                Text("Auto-gap: \(settings.autoGapEnabled ? "on" : "off")")
+            }
+            .font(.system(size: 11))
+            .foregroundColor(settings.autoGapEnabled ? .primary : .secondary)
 
             Spacer()
 
@@ -464,6 +487,7 @@ struct SetlistRowView: View {
     var showTime: Bool = true
     var showComments: Bool = false
     var showAlbumArtist: Bool = false
+    var wouldSkipAutoGap: Bool = false
 
     private var isCurrent: Bool { entry.state == .playing || entry.state == .paused || isActivelyPlaying }
     private var isCurrentPlaying: Bool { entry.state == .playing || isActivelyPlaying }
@@ -516,6 +540,15 @@ struct SetlistRowView: View {
                 Image(systemName: "stop.circle")
                     .font(.system(size: 11))
                     .foregroundColor(.orange)
+            }
+            if entry.autoGapApplied {
+                Image(systemName: "wave.3.left.circle.fill")
+                    .font(.system(size: 11))
+                    .foregroundColor(.green)
+            } else if entry.ignoresAutoGap || entry.autoGapSkipped || wouldSkipAutoGap {
+                Image(systemName: "wave.3.left.circle")
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary)
             }
         }
         .padding(.vertical, 3)

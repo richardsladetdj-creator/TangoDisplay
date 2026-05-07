@@ -15,12 +15,32 @@ struct SetlistEntry: Identifiable, Codable {
     var track: Track
     var state: SetlistEntryState
     var duration: TimeInterval?
+    var ignoresAutoGap: Bool = false
+    var autoGapApplied: Bool = false   // transient: true while auto-gap preroll is scheduled before this track
+    var autoGapSkipped: Bool = false   // transient: true when the first-track setting automatically skips the gap
+
+    enum CodingKeys: String, CodingKey {
+        case id, fileURL, track, state, duration, ignoresAutoGap
+        // autoGapApplied and autoGapSkipped are intentionally excluded — reset each playback session
+    }
 
     init(id: UUID = UUID(), fileURL: URL, track: Track, state: SetlistEntryState = .queued) {
         self.id = id
         self.fileURL = fileURL
         self.track = track
         self.state = state
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        fileURL = try c.decode(URL.self, forKey: .fileURL)
+        track = try c.decode(Track.self, forKey: .track)
+        state = try c.decode(SetlistEntryState.self, forKey: .state)
+        duration = try c.decodeIfPresent(TimeInterval.self, forKey: .duration)
+        ignoresAutoGap = try c.decodeIfPresent(Bool.self, forKey: .ignoresAutoGap) ?? false
+        autoGapApplied = false
+        autoGapSkipped = false
     }
 }
 
@@ -150,6 +170,22 @@ final class SetlistManager: ObservableObject {
             entries[i].state = .queued
         }
         save()
+    }
+
+    func toggleIgnoresAutoGap(id: UUID) {
+        guard let i = entries.firstIndex(where: { $0.id == id }) else { return }
+        entries[i].ignoresAutoGap.toggle()
+        save()
+    }
+
+    func setAutoGapApplied(id: UUID, applied: Bool) {
+        guard let i = entries.firstIndex(where: { $0.id == id }) else { return }
+        entries[i].autoGapApplied = applied
+    }
+
+    func setAutoGapSkipped(id: UUID, skipped: Bool) {
+        guard let i = entries.firstIndex(where: { $0.id == id }) else { return }
+        entries[i].autoGapSkipped = skipped
     }
 
     func remove(ids: Set<UUID>) {

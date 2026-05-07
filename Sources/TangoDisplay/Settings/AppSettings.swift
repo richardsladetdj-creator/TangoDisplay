@@ -110,6 +110,18 @@ final class AppSettings: ObservableObject {
         didSet { UserDefaults.standard.set(markAsPlayedAfterSeconds, forKey: kPrefix + "markAsPlayedAfterSeconds") }
     }
 
+    @Published var autoGapEnabled: Bool {
+        didSet { UserDefaults.standard.set(autoGapEnabled, forKey: kPrefix + "autoGapEnabled") }
+    }
+
+    @Published var autoGapDuration: Double {
+        didSet { UserDefaults.standard.set(autoGapDuration, forKey: kPrefix + "autoGapDuration") }
+    }
+
+    @Published var autoGapIgnoreFirstTrack: Bool {
+        didSet { UserDefaults.standard.set(autoGapIgnoreFirstTrack, forKey: kPrefix + "autoGapIgnoreFirstTrack") }
+    }
+
     // MARK: - Built-in player track info
 
     @Published var duplicateTrackProtection: Bool {
@@ -189,6 +201,9 @@ final class AppSettings: ObservableObject {
             .flatMap { $0 as? Bool } ?? false
         let savedSeconds = ud.integer(forKey: kPrefix + "markAsPlayedAfterSeconds")
         markAsPlayedAfterSeconds = savedSeconds > 0 ? savedSeconds : 10
+        autoGapEnabled = ud.object(forKey: kPrefix + "autoGapEnabled").flatMap { $0 as? Bool } ?? false
+        autoGapDuration = ud.object(forKey: kPrefix + "autoGapDuration").flatMap { $0 as? Double } ?? 4.0
+        autoGapIgnoreFirstTrack = ud.object(forKey: kPrefix + "autoGapIgnoreFirstTrack").flatMap { $0 as? Bool } ?? true
         duplicateTrackProtection = ud.object(forKey: kPrefix + "duplicateTrackProtection")
             .flatMap { $0 as? Bool } ?? false
         showYear = ud.object(forKey: kPrefix + "showYear").flatMap { $0 as? Bool } ?? true

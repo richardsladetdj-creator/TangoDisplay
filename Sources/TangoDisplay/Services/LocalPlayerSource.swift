@@ -46,6 +46,14 @@ final class LocalPlayerSource: NSObject, ObservableObject, MusicPlayerSource {
     private var earlyMarkedEntryIDs: Set<UUID> = []
     private var scheduleGeneration: Int = 0
 
+    // MARK: - Private — auto-gap
+
+    private var currentPaddingFrames: AVAudioFrameCount = 0
+    private var prevTrackSilenceAtEnd: Double = 0   // populated by background analysis of the track that just played
+    private var nextTrackSilenceAtStart: Double = 0 // populated by background analysis of the upcoming track
+    private var audioStartSampleTime: AVAudioFramePosition = 0
+    private var silencePending: Bool = false
+
     // MARK: - Init
 
     init(setlist: SetlistManager, settings: AppSettings, volume: Float = 1.0) {
@@ -149,6 +157,11 @@ final class LocalPlayerSource: NSObject, ObservableObject, MusicPlayerSource {
         audioFile = nil
         elapsed = 0
         duration = 0
+        currentPaddingFrames = 0
+        silencePending = false
+        audioStartSampleTime = 0
+        prevTrackSilenceAtEnd = 0
+        nextTrackSilenceAtStart = 0
         teardownObservers()
     }
 
@@ -244,6 +257,11 @@ final class LocalPlayerSource: NSObject, ObservableObject, MusicPlayerSource {
         elapsed = 0
         duration = 0
         seekOffset = 0
+        currentPaddingFrames = 0
+        silencePending = false
+        audioStartSampleTime = 0
+        prevTrackSilenceAtEnd = 0
+        nextTrackSilenceAtStart = 0
         reportCurrentState()
         reportPlaylist()
         onNextTrackUpdate?(nil)
@@ -314,6 +332,9 @@ final class LocalPlayerSource: NSObject, ObservableObject, MusicPlayerSource {
         playerNode.stop()
         seekOffset = seconds
         elapsed = seconds
+        currentPaddingFrames = 0
+        silencePending = false
+        audioStartSampleTime = 0
         scheduleGeneration += 1
         let gen = scheduleGeneration
         playerNode.scheduleSegment(file, startingFrame: startFrame, frameCount: frameCount, at: nil) { [weak self] in
@@ -346,8 +367,73 @@ final class LocalPlayerSource: NSObject, ObservableObject, MusicPlayerSource {
             audioEngine.connect(playerNode, to: eq, format: file.processingFormat)
             audioEngine.connect(eq, to: audioEngine.mainMixerNode, format: file.processingFormat)
             try audioEngine.start()
+
+            // Auto-gap: schedule silence before the file if needed.
+            // nextTrackSilenceAtStart is pre-populated by the background analysis from the previous track's loadEntry.
+            currentPaddingFrames = 0
+            silencePending = false
+            audioStartSampleTime = 0
+            let isFirstTrack = setlist.entries.first?.id == entry.id
+                && !setlist.entries.contains(where: { $0.state == .played })
+            var autoGapApplied = false
+            var autoGapSkipped = false
+            if !entry.ignoresAutoGap && settings.autoGapEnabled {
+                if settings.autoGapIgnoreFirstTrack && isFirstTrack {
+                    autoGapSkipped = true
+                } else {
+                    let padding = computeAutoGapPadding(
+                        prevSilenceAtEnd: prevTrackSilenceAtEnd,
+                        nextSilenceAtStart: nextTrackSilenceAtStart,
+                        minimumSilence: settings.autoGapDuration
+                    )
+                    if padding > 0 {
+                        let frames = AVAudioFrameCount(padding * file.fileFormat.sampleRate)
+                        silencePending = true
+                        let entryID = entry.id
+                        playerNode.scheduleBuffer(
+                            makeSilenceBuffer(format: file.processingFormat, frameCount: frames),
+                            completionCallbackType: .dataConsumed
+                        ) { [weak self] _ in
+                            DispatchQueue.main.async {
+                                guard let self,
+                                      let nodeTime = self.playerNode.lastRenderTime,
+                                      nodeTime.isSampleTimeValid,
+                                      let pt = self.playerNode.playerTime(forNodeTime: nodeTime) else { return }
+                                self.audioStartSampleTime = pt.sampleTime
+                                self.silencePending = false
+                                self.setlist.setAutoGapApplied(id: entryID, applied: false)
+                            }
+                        }
+                        currentPaddingFrames = frames
+                        autoGapApplied = true
+                    }
+                }
+            }
+            setlist.setAutoGapApplied(id: entry.id, applied: autoGapApplied)
+            setlist.setAutoGapSkipped(id: entry.id, skipped: autoGapSkipped)
+            prevTrackSilenceAtEnd = 0
+            nextTrackSilenceAtStart = 0
+
             playerNode.scheduleFile(file, at: nil) { [weak self] in
                 DispatchQueue.main.async { self?.handleTrackEnd(generation: gen) }
+            }
+
+            // Analyze current track's end-silence and pre-warm next track's start-silence in background.
+            let currentURL = entry.fileURL
+            let nextURL = setlist.entry(after: entry.id)?.fileURL
+            Task { [weak self] in
+                let result = await AudioSilenceAnalyzer.shared.analyze(url: currentURL)
+                let nextStart: Double
+                if let nextURL {
+                    let nextResult = await AudioSilenceAnalyzer.shared.analyze(url: nextURL)
+                    nextStart = nextResult.silenceAtStart
+                } else {
+                    nextStart = 0
+                }
+                await MainActor.run { [weak self] in
+                    self?.prevTrackSilenceAtEnd = result.silenceAtEnd
+                    self?.nextTrackSilenceAtStart = nextStart
+                }
             }
         } catch {
             os_log(.error, "TangoDisplay: failed to load %{public}@: %{public}@",
@@ -364,6 +450,25 @@ final class LocalPlayerSource: NSObject, ObservableObject, MusicPlayerSource {
     private func handleTrackEnd(generation: Int) {
         guard generation == scheduleGeneration else { return }
         skipNext()
+    }
+
+    private func computeAutoGapPadding(
+        prevSilenceAtEnd: Double,
+        nextSilenceAtStart: Double,
+        minimumSilence: Double
+    ) -> Double {
+        guard minimumSilence > 0 else { return 0 }
+        let existing = prevSilenceAtEnd + nextSilenceAtStart
+        let needed = max(0, minimumSilence - existing)
+        // Matches Embrace: if existing silence already meets minimum, still add 1s so the gap is perceptible.
+        return needed == 0 ? 1.0 : needed
+    }
+
+    private func makeSilenceBuffer(format: AVAudioFormat, frameCount: AVAudioFrameCount) -> AVAudioPCMBuffer {
+        // AVAudioPCMBuffer is zero-initialized, so this is already silent.
+        let buf = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount)!
+        buf.frameLength = frameCount
+        return buf
     }
 
     private func currentEntryIsPlayed() -> Bool {
@@ -478,9 +583,11 @@ final class LocalPlayerSource: NSObject, ObservableObject, MusicPlayerSource {
               nodeTime.isSampleTimeValid,
               let playerTime = playerNode.playerTime(forNodeTime: nodeTime) else { return }
 
+        guard !silencePending else { elapsed = 0; return }
         let sampleRate = file.fileFormat.sampleRate
         guard sampleRate > 0 else { return }
-        let newElapsed = seekOffset + Double(playerTime.sampleTime) / sampleRate
+        let audioFrames = max(0, playerTime.sampleTime - audioStartSampleTime)
+        let newElapsed = seekOffset + Double(audioFrames) / sampleRate
         elapsed = max(0, min(newElapsed, duration))
         duration = Double(file.length) / sampleRate
 

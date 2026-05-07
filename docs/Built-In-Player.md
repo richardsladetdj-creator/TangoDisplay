@@ -64,6 +64,7 @@ Each row shows:
 | Duration | Optional — toggle in Player Settings |
 | Comments / Album Artist | Optional — toggle in Player Settings |
 | Stop marker | Small stop icon when "Stop After This Track" is set |
+| Auto-gap icon | Filled green wave = auto-gap silence applied before this track · Outlined grey wave = skipped or ignored |
 
 The setlist persists across app restarts — it is saved automatically to Application Support.
 
@@ -136,6 +137,7 @@ Right-click any row:
 | **Mark as Not Played** | Resets a played track to queued so it will play again |
 | **Stop after Playing** | Sets a stop marker — playback halts automatically when this track finishes. Shows as **Resume after Playing** when already set; click again to clear it. |
 | **Delete** | Removes the track from the setlist (asks for confirmation) |
+| **Ignore Auto-gap before this Track** | Disables auto-gap for this track only. Shows as **Resume Auto-gap** when already set; click again to re-enable it. |
 
 > **Screenshot placeholder:** right-click context menu on a setlist row
 
@@ -159,6 +161,40 @@ A status bar at the bottom of the track list shows:
 
 - **Total duration** — the combined length of all remaining unplayed tracks
 - **Estimated end time** — a projected clock time when the setlist will finish, calculated from the current elapsed position, all remaining queued tracks, and any stop-after marker (e.g. "Ends ~23:45")
+- **Auto-gap status** — when auto-gap is enabled, a small green dot and "Auto-gap: on" label appear. The dot turns grey and the label reads "Auto-gap: off" when the feature is disabled.
+
+---
+
+## Auto-Gap
+
+Auto-gap analyses the silence at track boundaries and schedules a silent preroll buffer before each track so the gap between songs always meets your target minimum — useful for tango DJs who want consistent, perceptible separations between tandas without adding unnecessary dead air.
+
+> **How it works:** TangoDisplay reads the audio waveform at the end of the finishing track and the start of the incoming track, measures the existing silence, then prepends exactly as much extra silence as needed. Only silence is ever added — it never shortens a gap. If the existing silence already meets the minimum, a 1-second buffer is still inserted so the separation is always audible.
+
+### Enabling Auto-Gap
+
+1. Go to **Settings › Player**
+2. Under **Built-in Player**, enable the **Auto-gap** toggle
+3. Use the **Minimum gap** slider to set your target (0.5–5 s; default 4 s)
+
+### Skip Gap Before First Track
+
+When **Skip gap before first track** is enabled (the default), the opening track of the setlist starts immediately with no silence preroll — the gap only applies between consecutive tracks. Disable this if you want the same treatment from the very first song.
+
+### Per-Track Override
+
+Right-click any queued track row and select **Ignore Auto-gap before this Track** to exempt that individual track. The option becomes **Resume Auto-gap** when already set; click it again to re-enable. This lets you keep auto-gap active globally while skipping it for specific tracks (e.g. a track you want to follow immediately after its predecessor).
+
+### Reading the Indicators
+
+Three places in the UI reflect auto-gap state:
+
+| Indicator | What it means |
+|---|---|
+| **Setlist footer dot** | Green dot + "Auto-gap: on" = feature active. Grey dot + "Auto-gap: off" = feature disabled. |
+| **Filled green wave icon** on a track row | Auto-gap silence was successfully scheduled before this track |
+| **Outlined grey wave icon** on a track row | Auto-gap was skipped or ignored for this track (first track with "Skip gap before first track" on, or per-track override active) |
+| *(no icon)* | Auto-gap not applicable to this track |
 
 ---
 
@@ -243,6 +279,12 @@ These options appear only when **Built-in Player** is selected.
 **Cortina fade** — duration of the volume fade used by Fade & Stop and Fade & Continue (1–15 seconds, in 0.5-second steps). Default: 5 seconds.
 
 **Duplicate track protection** — when enabled, dropping a track that already exists in the setlist shows a confirmation alert before adding it. Includes a **Remember for this session** checkbox that silences the prompt for the rest of the session (until the setlist is cleared). Off by default.
+
+**Auto-gap** — when enabled, TangoDisplay analyses silence at track boundaries and pads each transition with a silent preroll so the gap always meets the minimum. Only silence is added — existing gaps are never shortened.
+
+**Minimum gap** — the target gap duration in seconds (0.5–5 s, in 0.5-second steps). Default: 4 seconds. Visible only when Auto-gap is enabled.
+
+**Skip gap before first track** — when on (default), the first track in the setlist starts immediately with no silence preroll. The gap applies only between consecutive tracks.
 
 **Mark as played** — controls when a track receives its played stamp:
 
