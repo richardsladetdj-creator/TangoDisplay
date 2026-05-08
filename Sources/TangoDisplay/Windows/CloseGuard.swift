@@ -9,18 +9,7 @@ final class CloseGuard: NSObject, NSWindowDelegate {
     private override init() { super.init() }
 
     func windowShouldClose(_ sender: NSWindow) -> Bool {
-        let alert = NSAlert()
-        alert.messageText = "Quit TangoDisplay?"
-        alert.informativeText = "This will close the display and stop polling Music."
-        alert.alertStyle = .warning
-        alert.addButton(withTitle: "Quit")
-        alert.addButton(withTitle: "Cancel")
-
-        let response = alert.runModal()
-        if response == .alertFirstButtonReturn {
-            NSApp.terminate(nil)
-        }
-        // Always return false — either we're quitting or the user cancelled
+        NSApp.terminate(nil)
         return false
     }
 }

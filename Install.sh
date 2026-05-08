@@ -48,6 +48,9 @@ else
   echo "WARN: icon.icns not found — app will use default macOS icon"
 fi
 
+# Copy image resources into Contents/Resources
+cp "Sources/TangoDisplay/Resources/SetlistLogo.png" "$RES_DIR/"
+
 echo "== Write Info.plist =="
 cat > "$CONTENTS/Info.plist" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
@@ -65,9 +68,9 @@ cat > "$CONTENTS/Info.plist" <<EOF
   <key>CFBundleIconFile</key>
   <string>icon</string>
   <key>CFBundleVersion</key>
-  <string>31</string>
+  <string>32</string>
   <key>CFBundleShortVersionString</key>
-  <string>3.5.1</string>
+  <string>3.5.2</string>
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>LSMinimumSystemVersion</key>

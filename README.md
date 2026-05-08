@@ -47,7 +47,7 @@ A native macOS menu-bar app that shows a clean, fullscreen dancer display on an 
 ### Option A — Download pre-built app (easiest)
 
 1. Go to the [Releases](https://github.com/richardsladetdj-creator/TangoDisplay/releases) page
-2. Download `TangoDisplay-v3.5.1-universal.zip` (works on both Apple Silicon and Intel Macs)
+2. Download `TangoDisplay-v3.5.2-universal.zip` (works on both Apple Silicon and Intel Macs)
 3. Unzip and drag `TangoDisplay.app` to your `/Applications` folder
 4. **Right-click › Open** on first launch (required because the app is ad-hoc signed, not notarised)
 5. Grant the permissions macOS requests (see [Permissions](#permissions) below)
@@ -133,6 +133,11 @@ Key design decisions:
 ---
 
 ## Changelog
+
+### v3.5.2
+- **Improvement (Built-In Player):** Album artwork in the player controls is now displayed as a dedicated side panel sized to match the height of the playback controls, replacing the previous 70 pt corner overlay. When no track artwork is available a `SetlistLogo` placeholder fills the panel so the layout stays consistent.
+- **Improvement (Built-In Player):** The seek bar is now a custom progress indicator (coloured fill, rounded corners) instead of a native `Slider`. The mark-as-played threshold marker is positioned accurately without the 10 pt inset workaround the native slider required.
+- **Fix:** Quit confirmation is now handled once in `applicationShouldTerminate(_:)`, catching all quit paths — ⌘Q, the Dock menu, and the menu-bar Quit item — so the dialog can never be bypassed or shown twice.
 
 ### v3.5.1
 - **Fix (Built-In Player):** The "next to play" highlight now correctly tracks the active entry while the player is running. Previously the `nextToPlayID` guard fell through when `isPlayerActive` was true, causing the indicator to point at the wrong track or disappear.

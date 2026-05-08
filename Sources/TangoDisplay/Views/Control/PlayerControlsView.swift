@@ -5,32 +5,59 @@ struct PlayerControlsView: View {
     @EnvironmentObject var appState: AppState
     var onScrollToCurrentTrack: (() -> Void)? = nil
 
+    @State private var artworkHeight: CGFloat = 100
+
     var body: some View {
         VStack(spacing: 10) {
-            trackInfo
-            transportButtons
-            fadeButtons
+            HStack(alignment: .top, spacing: 12) {
+                VStack(spacing: 10) {
+                    trackInfo
+                    transportButtons
+                    fadeButtons
+                }
+                .frame(maxWidth: .infinity)
+                .background(GeometryReader { geo in
+                    Color.clear.preference(key: ControlsHeightKey.self, value: geo.size.height)
+                })
+
+                artworkPanel
+                    .frame(width: artworkHeight, height: artworkHeight)
+            }
             seekBar
             volumeRow
         }
-        .overlay(alignment: .topTrailing) {
-            if let art = appState.currentArtwork {
-                Image(nsImage: art)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: artworkSize, height: artworkSize)
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
-                    .transition(.opacity)
-            }
-        }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
+        .onPreferenceChange(ControlsHeightKey.self) { artworkHeight = $0 }
         .animation(.easeInOut(duration: 0.2), value: appState.currentArtwork != nil)
     }
 
-    // MARK: - Subviews
+    // MARK: - Artwork panel
 
-    private let artworkSize: CGFloat = 70
+    @ViewBuilder
+    private var artworkPanel: some View {
+        ZStack {
+            Color(red: 0.05, green: 0.05, blue: 0.08)
+            if let art = appState.currentArtwork {
+                Image(nsImage: art)
+                    .resizable()
+                    .scaledToFill()
+            } else if let url = Bundle.main.url(forResource: "SetlistLogo", withExtension: "png"),
+                      let nsImage = NSImage(contentsOf: url) {
+                Image(nsImage: nsImage)
+                    .resizable()
+                    .scaledToFit()
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    private struct ControlsHeightKey: PreferenceKey {
+        static var defaultValue: CGFloat = 100
+        static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
+    }
+
+    // MARK: - Subviews
 
     private var trackInfo: some View {
         VStack(spacing: 3) {
@@ -89,31 +116,30 @@ struct PlayerControlsView: View {
 
     private var seekBar: some View {
         VStack(spacing: 3) {
-            Slider(
-                value: Binding(
-                    get: { player.elapsed },
-                    set: { appState.transportSeek(to: $0) }
-                ),
-                in: 0...max(player.duration, 1)
-            )
-            .allowsHitTesting(false)
-            .overlay {
-                // GeometryReader in overlay is layout-neutral — never resizes the slider
-                GeometryReader { geo in
+            GeometryReader { geo in
+                let progress = player.duration > 0
+                    ? player.elapsed / max(player.duration, 1)
+                    : 0
+                ZStack(alignment: .leading) {
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(Color(nsColor: .separatorColor))
+                        .frame(height: 4)
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(ControlTheme.accent)
+                        .frame(width: geo.size.width * progress, height: 4)
                     let shouldShow = !appState.settings.markAsPlayedAfterCompletion
                         && player.duration > 0
                         && !player.isCurrentEntryMarkedAsPlayed
                     let fraction = min(1.0, Double(appState.settings.markAsPlayedAfterSeconds) / player.duration)
-                    // macOS slider track has ~10pt inset on each side
-                    let x = 10 + fraction * (geo.size.width - 20)
                     Rectangle()
                         .fill(ControlTheme.accent.opacity(0.7))
                         .frame(width: 2, height: 10)
-                        .position(x: x, y: geo.size.height / 2)
+                        .position(x: fraction * geo.size.width, y: geo.size.height / 2)
                         .opacity(shouldShow ? 1 : 0)
                 }
                 .allowsHitTesting(false)
             }
+            .frame(height: 20)
             HStack {
                 Text(formatTime(player.elapsed))
                     .font(.system(size: 11, design: .monospaced))

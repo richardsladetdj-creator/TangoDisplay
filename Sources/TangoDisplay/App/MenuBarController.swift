@@ -77,13 +77,6 @@ final class MenuBarController {
     }
 
     @objc private func quitApp() {
-        let alert = NSAlert()
-        alert.messageText = "Quit TangoDisplay?"
-        alert.informativeText = "Are you sure you want to quit TangoDisplay?"
-        alert.alertStyle = .warning
-        alert.addButton(withTitle: "Quit")
-        alert.addButton(withTitle: "Cancel")
-        guard alert.runModal() == .alertFirstButtonReturn else { return }
         NSApp.terminate(nil)
     }
 }
