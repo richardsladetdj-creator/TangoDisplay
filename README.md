@@ -47,7 +47,7 @@ A native macOS menu-bar app that shows a clean, fullscreen dancer display on an 
 ### Option A — Download pre-built app (easiest)
 
 1. Go to the [Releases](https://github.com/richardsladetdj-creator/TangoDisplay/releases) page
-2. Download `TangoDisplay-v3.5.0-universal.zip` (works on both Apple Silicon and Intel Macs)
+2. Download `TangoDisplay-v3.5.1-universal.zip` (works on both Apple Silicon and Intel Macs)
 3. Unzip and drag `TangoDisplay.app` to your `/Applications` folder
 4. **Right-click › Open** on first launch (required because the app is ad-hoc signed, not notarised)
 5. Grant the permissions macOS requests (see [Permissions](#permissions) below)
@@ -133,6 +133,10 @@ Key design decisions:
 ---
 
 ## Changelog
+
+### v3.5.1
+- **Fix (Built-In Player):** The "next to play" highlight now correctly tracks the active entry while the player is running. Previously the `nextToPlayID` guard fell through when `isPlayerActive` was true, causing the indicator to point at the wrong track or disappear.
+- **Fix (Built-In Player):** Already-played tracks can be reordered in the setlist again. Previously the drag handle was disabled for any track in the `.played` state; it is now disabled only for the currently `.playing` track.
 
 ### v3.5.0
 - **New (Built-In Player):** Auto-gap. Enable **Auto-gap** in **Settings › Player › Built-in Player** to automatically pad the silence between tracks to a configurable minimum. TangoDisplay analyses the silence at the end of each finishing track and the start of the next, then schedules a silent preroll buffer so the combined gap always meets your target. Only silence is ever added — existing gaps that already meet the minimum are left untouched (a 1-second perceptibility buffer is still inserted so the separation is always audible). Three indicators show auto-gap state at a glance:

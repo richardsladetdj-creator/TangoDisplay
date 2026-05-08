@@ -148,8 +148,9 @@ struct SetlistView: View {
     // MARK: - Track list
 
     private var nextToPlayID: UUID? {
-        guard !isPlayerActive,
-              !setlist.entries.contains(where: { $0.state == .playing || $0.state == .paused })
+        guard !isPlayerActive else { return nil }
+        if let id = activeEntryID { return id }
+        guard !setlist.entries.contains(where: { $0.state == .playing || $0.state == .paused })
         else { return nil }
         return setlist.entries.first(where: { $0.state == .queued })?.id
     }
@@ -173,7 +174,7 @@ struct SetlistView: View {
                     wouldSkipAutoGap: wouldSkipAutoGap
                 )
                 .tag(entry.id)
-                .moveDisabled(entry.state == .played)
+                .moveDisabled(entry.state == .playing)
                 // NSViewRepresentable overlay handles double-click without adding any
                 // SwiftUI gesture recognizer — keeping NSTableView's primary click
                 // handler free to process single/multi-selection.
