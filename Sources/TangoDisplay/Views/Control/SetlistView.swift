@@ -242,11 +242,16 @@ struct SetlistView: View {
         }
         .toolbar {
             ToolbarItem(placement: .automatic) {
-                Button {
-                    exportPlaylistName = Self.defaultExportName()
-                    showExportDialog = true
+                Menu {
+                    Button("Export to Apple Music") {
+                        exportPlaylistName = Self.defaultExportName()
+                        showExportDialog = true
+                    }
+                    Button("Export to M3U8…") {
+                        exportM3U8()
+                    }
                 } label: {
-                    Label("Export to Apple Music", systemImage: "square.and.arrow.up")
+                    Label("Share", systemImage: "square.and.arrow.up")
                 }
                 .disabled(setlist.entries.isEmpty)
             }
@@ -331,6 +336,22 @@ struct SetlistView: View {
     private var deleteConfirmationTitle: String {
         let count = pendingDeleteIDs?.count ?? 0
         return count == 1 ? "Delete Track?" : "Delete \(count) Tracks?"
+    }
+
+    private func exportM3U8() {
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = "\(Self.defaultExportName()).m3u8"
+        panel.allowedContentTypes = [UTType(filenameExtension: "m3u8") ?? .plainText]
+        panel.canCreateDirectories = true
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+
+        var lines = ["#EXTM3U"]
+        for entry in setlist.entries {
+            let secs = Int(entry.duration ?? -1)
+            lines.append("#EXTINF:\(secs),\(entry.track.artist) - \(entry.track.title)")
+            lines.append(entry.fileURL.path)
+        }
+        try? lines.joined(separator: "\n").write(to: url, atomically: true, encoding: .utf8)
     }
 
     private static func defaultExportName() -> String {

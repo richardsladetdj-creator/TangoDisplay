@@ -3,8 +3,9 @@ import SwiftUI
 struct LevelMeterView: View {
     @ObservedObject var meter: AudioLevelMeter
 
+    static let totalWidth: CGFloat = 44 + 44 + 26 + 8 + 8
+
     private let barWidth:   CGFloat = 44
-    private let barGap:     CGFloat = 8
     private let scaleWidth: CGFloat = 26
     private let padding:    CGFloat = 8
 
@@ -25,12 +26,13 @@ struct LevelMeterView: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 0) {
+                leftBarCanvas
                 scaleColumn
-                barsCanvas
+                rightBarCanvas
             }
             .frame(maxHeight: .infinity)
 
-            HStack(spacing: barGap) {
+            HStack(spacing: scaleWidth) {
                 Text("L")
                     .font(.system(size: 9, weight: .medium))
                     .foregroundStyle(.secondary)
@@ -40,7 +42,6 @@ struct LevelMeterView: View {
                     .foregroundStyle(.secondary)
                     .frame(width: barWidth, alignment: .center)
             }
-            .padding(.leading, scaleWidth)
             .padding(.top, 4)
             .padding(.bottom, 2)
         }
@@ -75,14 +76,8 @@ struct LevelMeterView: View {
         .frame(width: scaleWidth)
     }
 
-    private var barsCanvas: some View {
-        let ll = meter.leftLevel
-        let rl = meter.rightLevel
-        let lp = meter.leftPeak
-        let rp = meter.rightPeak
+    private func barCanvas(level: Float, peak: Float) -> some View {
         let bw = barWidth
-        let bg = barGap
-
         return Canvas { ctx, size in
             let h = size.height
 
@@ -90,40 +85,36 @@ struct LevelMeterView: View {
                 let y = h * (1.0 - frac)
                 var path = Path()
                 path.move(to: CGPoint(x: 0, y: y))
-                path.addLine(to: CGPoint(x: size.width, y: y))
+                path.addLine(to: CGPoint(x: bw, y: y))
                 ctx.stroke(path, with: .color(.white.opacity(0.12)), lineWidth: 1)
             }
 
-            let channels: [(CGFloat, Float, Float)] = [
-                (0,       ll, lp),
-                (bw + bg, rl, rp)
-            ]
-
-            for (x, level, peak) in channels {
+            ctx.fill(
+                Path(CGRect(x: 0, y: 0, width: bw, height: h)),
+                with: .color(Color(nsColor: .separatorColor).opacity(0.3))
+            )
+            let levelH = h * CGFloat(min(level, 1.0))
+            if levelH > 0 {
                 ctx.fill(
-                    Path(CGRect(x: x, y: 0, width: bw, height: h)),
-                    with: .color(Color(nsColor: .separatorColor).opacity(0.3))
+                    Path(CGRect(x: 0, y: h - levelH, width: bw, height: levelH)),
+                    with: .linearGradient(
+                        Self.gradient,
+                        startPoint: CGPoint(x: 0, y: h),
+                        endPoint:   CGPoint(x: 0, y: 0)
+                    )
                 )
-                let levelH = h * CGFloat(min(level, 1.0))
-                if levelH > 0 {
-                    ctx.fill(
-                        Path(CGRect(x: x, y: h - levelH, width: bw, height: levelH)),
-                        with: .linearGradient(
-                            Self.gradient,
-                            startPoint: CGPoint(x: x, y: h),
-                            endPoint:   CGPoint(x: x, y: 0)
-                        )
-                    )
-                }
-                if peak > 0 {
-                    let peakY = h * (1.0 - CGFloat(min(peak, 1.0)))
-                    ctx.fill(
-                        Path(CGRect(x: x, y: peakY, width: bw, height: 2)),
-                        with: .color(peak >= 1.0 ? .red : .white)
-                    )
-                }
+            }
+            if peak > 0 {
+                let peakY = h * (1.0 - CGFloat(min(peak, 1.0)))
+                ctx.fill(
+                    Path(CGRect(x: 0, y: peakY, width: bw, height: 2)),
+                    with: .color(peak >= 1.0 ? .red : .white)
+                )
             }
         }
-        .frame(width: barWidth * 2 + barGap)
+        .frame(width: barWidth)
     }
+
+    private var leftBarCanvas:  some View { barCanvas(level: meter.leftLevel,  peak: meter.leftPeak)  }
+    private var rightBarCanvas: some View { barCanvas(level: meter.rightLevel, peak: meter.rightPeak) }
 }

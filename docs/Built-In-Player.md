@@ -211,11 +211,21 @@ The balance setting persists across app restarts. The Balance button is disabled
 
 ---
 
-## Export to Apple Music
+## Exporting the Setlist
 
-Click **Export to Apple Music** in the toolbar to create a new Apple Music playlist containing all tracks in the current setlist. The playlist is named with the current date and time.
+Click the **Share** button (↑ icon) in the Setlist toolbar to open the export menu. The button is disabled when the setlist is empty.
+
+### Export to Apple Music
+
+Creates a new Apple Music playlist containing all tracks in the current setlist. The playlist is named with the current date and time.
 
 > **Note:** Export to Apple Music requires the **Automation › Music** permission. macOS will prompt for this on first use.
+
+### Export to M3U8…
+
+Opens a Save dialog and writes a standard M3U8 playlist file. Each track is written as an `#EXTINF:` line (with duration and `Artist — Title` metadata) followed by the absolute file path. The default filename is `Tango Display SetList DDMMYY HH:MM.m3u8`.
+
+Use this to import your milonga setlist into any M3U-compatible player or DJ software.
 
 ---
 

@@ -5,8 +5,6 @@ struct PlayerControlsView: View {
     @EnvironmentObject var appState: AppState
     var onScrollToCurrentTrack: (() -> Void)? = nil
 
-    @State private var artworkHeight: CGFloat = 100
-
     var body: some View {
         VStack(spacing: 10) {
             HStack(alignment: .top, spacing: 12) {
@@ -19,12 +17,10 @@ struct PlayerControlsView: View {
                     fadeButtons
                 }
                 .frame(maxWidth: .infinity)
-                .background(GeometryReader { geo in
-                    Color.clear.preference(key: ControlsHeightKey.self, value: geo.size.height)
-                })
 
                 artworkPanel
-                    .frame(width: artworkHeight, height: artworkHeight)
+                    .frame(width: LevelMeterView.totalWidth)
+                    .frame(maxHeight: .infinity)
             }
             .fixedSize(horizontal: false, vertical: true)
             seekBar
@@ -32,7 +28,6 @@ struct PlayerControlsView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
-        .onPreferenceChange(ControlsHeightKey.self) { artworkHeight = $0 }
         .animation(.easeInOut(duration: 0.2), value: appState.currentArtwork != nil)
     }
 
@@ -54,11 +49,6 @@ struct PlayerControlsView: View {
             }
         }
         .clipShape(RoundedRectangle(cornerRadius: 8))
-    }
-
-    private struct ControlsHeightKey: PreferenceKey {
-        static var defaultValue: CGFloat = 100
-        static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
     }
 
     // MARK: - Subviews
