@@ -160,6 +160,16 @@ final class AppSettings: ObservableObject {
         didSet { UserDefaults.standard.set(showTrackCounter, forKey: kPrefix + "showTrackCounter") }
     }
 
+    // MARK: - Track info transformations
+
+    @Published var trackTransforms: [String: TransformRule] {
+        didSet {
+            if let data = try? JSONEncoder().encode(trackTransforms) {
+                UserDefaults.standard.set(data, forKey: kPrefix + "trackTransforms")
+            }
+        }
+    }
+
     // MARK: - Init
 
     init() {
@@ -227,6 +237,12 @@ final class AppSettings: ObservableObject {
         }
         mirrorMode = ud.object(forKey: kPrefix + "mirrorMode").flatMap { $0 as? Bool } ?? true
         showTrackCounter = ud.object(forKey: kPrefix + "showTrackCounter").flatMap { $0 as? Bool } ?? true
+        if let data = ud.data(forKey: kPrefix + "trackTransforms"),
+           let rules = try? JSONDecoder().decode([String: TransformRule].self, from: data) {
+            trackTransforms = rules
+        } else {
+            trackTransforms = [:]
+        }
     }
 
     // MARK: - Helpers
@@ -253,6 +269,15 @@ final class AppSettings: ObservableObject {
         }
 
         return trimmed
+    }
+
+    func transform(_ value: String, for field: TrackInfoField) -> String {
+        guard let rule = trackTransforms[field.rawValue],
+              rule.enabled, !rule.pattern.isEmpty else { return value }
+        guard let regex = try? NSRegularExpression(pattern: rule.pattern) else { return value }
+        let range = NSRange(value.startIndex..., in: value)
+        let result = regex.stringByReplacingMatches(in: value, range: range, withTemplate: rule.replacement)
+        return result.trimmingCharacters(in: .whitespaces).isEmpty ? value : result
     }
 
     func makeDetector() -> CortinaDetector {

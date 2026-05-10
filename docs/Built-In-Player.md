@@ -329,3 +329,7 @@ Toggles for which fields appear in setlist rows (visible only with Built-in Play
 | Time | On | Shows duration and current position |
 | Comments | Off | |
 | Album Artist | Off | |
+
+### Track Info Transformations
+
+The **Advanced** tab in Settings lets you apply optional regex-based rules to reformat how Artist, Title, Year, Album Artist, and Comments are displayed on the dancer screen — without modifying the original music tags. See [Advanced Settings](Advanced-Settings) for full details and examples.

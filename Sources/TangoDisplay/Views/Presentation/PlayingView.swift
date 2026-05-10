@@ -21,7 +21,7 @@ struct PlayingView: View {
                     }
                 case .artist:
                     if profile.showArtistDance, let artist = state.currentTrack?.artist, !artist.isEmpty {
-                        Text(artist)
+                        Text(settings.transform(artist, for: .artist))
                             .font(profile.artistFont)
                             .foregroundColor(profile.artistSwiftUIColor)
                             .multilineTextAlignment(.center)
@@ -30,14 +30,17 @@ struct PlayingView: View {
                     }
                 case .year:
                     if profile.showYearDance, let year = state.currentTrack?.year {
-                        Text(String(year))
-                            .font(profile.yearFont)
-                            .foregroundColor(profile.yearSwiftUIColor)
-                            .multilineTextAlignment(.center)
+                        let displayYear = settings.transform(String(year), for: .year)
+                        if !displayYear.isEmpty {
+                            Text(displayYear)
+                                .font(profile.yearFont)
+                                .foregroundColor(profile.yearSwiftUIColor)
+                                .multilineTextAlignment(.center)
+                        }
                     }
                 case .title:
                     if profile.showTitleDance, let title = state.currentTrack?.title, !title.isEmpty {
-                        Text(title)
+                        Text(settings.transform(title, for: .title))
                             .font(profile.titleFont)
                             .foregroundColor(profile.titleSwiftUIColor)
                             .multilineTextAlignment(.center)
@@ -46,14 +49,18 @@ struct PlayingView: View {
                     }
                 case .singer:
                     if profile.showSingerDance,
-                       let singer = state.currentTrack.flatMap({ profile.singerValue(from: $0) }),
-                       !singer.isEmpty {
-                        Text(singer)
-                            .font(profile.singerFont)
-                            .foregroundColor(profile.singerSwiftUIColor)
-                            .multilineTextAlignment(.center)
-                            .lineLimit(2)
-                            .minimumScaleFactor(0.5)
+                       let rawSinger = state.currentTrack.flatMap({ profile.singerValue(from: $0) }),
+                       !rawSinger.isEmpty {
+                        let singerField: TrackInfoField = profile.singerSource == .albumArtist ? .albumArtist : .comments
+                        let singer = settings.transform(rawSinger, for: singerField)
+                        if !singer.isEmpty {
+                            Text(singer)
+                                .font(profile.singerFont)
+                                .foregroundColor(profile.singerSwiftUIColor)
+                                .multilineTextAlignment(.center)
+                                .lineLimit(2)
+                                .minimumScaleFactor(0.5)
+                        }
                     }
                 case .cortinaLabel, .cortinaArtist, .cortinaTitle, .nextUpLabel:
                     EmptyView()

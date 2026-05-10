@@ -9,6 +9,7 @@ enum SidebarItem: String, Hashable, CaseIterable {
     case appearance
     case display
     case player
+    case advanced
     case profiles
 
     var label: String {
@@ -19,6 +20,7 @@ enum SidebarItem: String, Hashable, CaseIterable {
         case .appearance:    return "Appearance"
         case .display:       return "Display"
         case .player:        return "Player"
+        case .advanced:      return "Advanced"
         case .profiles:      return "Profiles"
         }
     }
@@ -31,15 +33,16 @@ enum SidebarItem: String, Hashable, CaseIterable {
         case .appearance:    return "paintbrush"
         case .display:       return "display"
         case .player:        return "music.note.list"
+        case .advanced:      return "slider.horizontal.3"
         case .profiles:      return "paintpalette"
         }
     }
 
     var section: String {
         switch self {
-        case .live, .setlist:                             return "Live"
-        case .cortinaRules, .appearance, .display, .player: return "Settings"
-        case .profiles:                                   return "Profiles"
+        case .live, .setlist:                                          return "Live"
+        case .cortinaRules, .appearance, .display, .player, .advanced: return "Settings"
+        case .profiles:                                                return "Profiles"
         }
     }
 }
@@ -134,6 +137,7 @@ struct ControlView: View {
                 sidebarRow(.appearance)
                 sidebarRow(.display)
                 sidebarRow(.player)
+                sidebarRow(.advanced)
             }
             Section("Profiles") {
                 sidebarRow(.profiles)
@@ -178,6 +182,9 @@ struct ControlView: View {
         case .player:
             PlayerSettingsView()
                 .environmentObject(appState)
+                .environmentObject(appState.settings)
+        case .advanced:
+            AdvancedSettingsView()
                 .environmentObject(appState.settings)
         case .profiles:
             ProfilesView()

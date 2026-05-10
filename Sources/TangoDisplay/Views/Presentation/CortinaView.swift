@@ -24,7 +24,7 @@ struct CortinaView: View {
                         if profile.showCortinaTrackDuringCortina,
                            profile.showCortinaTrackArtist,
                            let artist = state.currentTrack?.artist, !artist.isEmpty {
-                            Text(artist)
+                            Text(settings.transform(artist, for: .artist))
                                 .font(profile.cortinaArtistFont)
                                 .foregroundColor(profile.cortinaArtistSwiftUIColor)
                                 .multilineTextAlignment(.center)
@@ -35,7 +35,7 @@ struct CortinaView: View {
                         if profile.showCortinaTrackDuringCortina,
                            profile.showCortinaTrackTitle,
                            let title = state.currentTrack?.title, !title.isEmpty {
-                            Text(title)
+                            Text(settings.transform(title, for: .title))
                                 .font(profile.cortinaTitleFont)
                                 .foregroundColor(profile.cortinaTitleSwiftUIColor)
                                 .multilineTextAlignment(.center)
@@ -72,7 +72,7 @@ struct CortinaView: View {
                             }
                         case .artist:
                             if profile.showArtistCortina {
-                                Text(next.artist)
+                                Text(settings.transform(next.artist, for: .artist))
                                     .font(profile.artistFont)
                                     .foregroundColor(profile.artistSwiftUIColor)
                                     .lineLimit(2)
@@ -81,14 +81,17 @@ struct CortinaView: View {
                             }
                         case .year:
                             if profile.showYearCortina, let year = next.year {
-                                Text(String(year))
-                                    .font(profile.yearFont)
-                                    .foregroundColor(profile.yearSwiftUIColor)
-                                    .multilineTextAlignment(.center)
+                                let displayYear = settings.transform(String(year), for: .year)
+                                if !displayYear.isEmpty {
+                                    Text(displayYear)
+                                        .font(profile.yearFont)
+                                        .foregroundColor(profile.yearSwiftUIColor)
+                                        .multilineTextAlignment(.center)
+                                }
                             }
                         case .title:
                             if profile.showTitleCortina, !next.title.isEmpty {
-                                Text(next.title)
+                                Text(settings.transform(next.title, for: .title))
                                     .font(profile.titleFont)
                                     .foregroundColor(profile.titleSwiftUIColor)
                                     .multilineTextAlignment(.center)
@@ -97,13 +100,17 @@ struct CortinaView: View {
                             }
                         case .singer:
                             if profile.showSingerCortina,
-                               let singer = profile.singerValue(from: next), !singer.isEmpty {
-                                Text(singer)
-                                    .font(profile.singerFont)
-                                    .foregroundColor(profile.singerSwiftUIColor)
-                                    .multilineTextAlignment(.center)
-                                    .lineLimit(2)
-                                    .minimumScaleFactor(0.5)
+                               let rawSinger = profile.singerValue(from: next), !rawSinger.isEmpty {
+                                let singerField: TrackInfoField = profile.singerSource == .albumArtist ? .albumArtist : .comments
+                                let singer = settings.transform(rawSinger, for: singerField)
+                                if !singer.isEmpty {
+                                    Text(singer)
+                                        .font(profile.singerFont)
+                                        .foregroundColor(profile.singerSwiftUIColor)
+                                        .multilineTextAlignment(.center)
+                                        .lineLimit(2)
+                                        .minimumScaleFactor(0.5)
+                                }
                             }
                         default:
                             EmptyView()

@@ -24,6 +24,7 @@ TangoDisplay is a native macOS menu-bar app for tango DJs. Connect it to Music.a
 | [Supported Players](Supported-Players) | Feature matrix and setup notes for all five player sources |
 | [Live View](Live-View) | The control window — status, preview, and action buttons |
 | [Built-In Player](Built-In-Player) | Native setlist, playback controls, EQ, and cortina auto-fade |
+| [Advanced Settings](Advanced-Settings) | Regex-based track info transformations |
 | [Cortina Rules](Cortina-Rules) | How automatic cortina detection works and how to configure it |
 | [Appearance](Appearance) | Colors, fonts, background image, and transitions |
 | [Display Settings](Display-Settings) | Monitor selection, mirror mode, and display labels |
