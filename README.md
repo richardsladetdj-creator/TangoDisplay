@@ -48,7 +48,7 @@ A native macOS menu-bar app that shows a clean, fullscreen dancer display on an 
 ### Option A — Download pre-built app (easiest)
 
 1. Go to the [Releases](https://github.com/richardsladetdj-creator/TangoDisplay/releases) page
-2. Download `TangoDisplay-v3.7.1-universal.zip` (works on both Apple Silicon and Intel Macs)
+2. Download `TangoDisplay-v3.8.0-universal.zip` (works on both Apple Silicon and Intel Macs)
 3. Unzip and drag `TangoDisplay.app` to your `/Applications` folder
 4. **Right-click › Open** on first launch (required because the app is ad-hoc signed, not notarised)
 5. Grant the permissions macOS requests (see [Permissions](#permissions) below)
@@ -134,6 +134,9 @@ Key design decisions:
 ---
 
 ## Changelog
+
+### v3.8.0
+- **New (Built-In Player):** Auto-fade cortinas. Enable **Auto-fade all cortinas** in **Settings › Player › Built-in Player** to automatically fade out cortinas and advance to the next track after a configurable play time. An orange marker on the seek bar shows exactly when the fade will begin. Configure the play time with the **Cortina play time** slider (5–120 s); TangoDisplay adjusts automatically for short cortinas so the fade always completes before the track ends. Per-track override: right-click any cortina and select **Skip Auto-fade** to disable auto-fade for that track only — the fade buttons remain active for manual control. The option is hidden once fading has started. When auto-fade is active, the Fade & Stop and Fade & Continue buttons are disabled — the auto-fade handles the transition automatically. An orange dot and "Auto-fade: on" label appear in the setlist footer when the feature is enabled.
 
 ### v3.7.1
 - **Fix (Built-In Player):** Tracks with audio running to the very end of the file no longer have their final second cut off. The completion callback now fires only after audio has been fully played back through the hardware output, so the player no longer discards the tail of a track that has no built-in trailing silence.

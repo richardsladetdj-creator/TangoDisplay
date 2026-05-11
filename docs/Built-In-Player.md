@@ -83,7 +83,7 @@ The controls are arranged in three columns with a seek bar and volume row below:
 - **Track info** — title and artist of the current track
 - **Transport button** — large central play/stop button (see states below)
 - **Fade buttons** — Fade & Stop and Fade & Continue (see below)
-- **Seek bar** — drag to jump to any position in the track. When "After…" mark-as-played timing is active, a small vertical marker line shows the threshold position
+- **Seek bar** — drag to jump to any position in the track. When "After…" mark-as-played timing is active, a small vertical marker line shows the threshold position. An orange marker shows where auto-fade will begin (when Auto-fade is enabled for a cortina).
 - **Time display** — elapsed and remaining time
 - **Volume slider** — master volume for the built-in player (0–100%)
 - **Artwork panel** — current track artwork, sized to match the height of the controls column. Falls back to the SetlistLogo placeholder when no artwork is embedded in the file.
@@ -120,6 +120,8 @@ Both buttons are disabled while a fade is already in progress. The fade uses an 
 
 Configure the fade duration in **Player Settings › Cortina fade** (1–15 seconds).
 
+When **Auto-fade all cortinas** is enabled, the fade buttons are automatically disabled while a cortina is playing — the auto-fade will handle the transition at the configured time. Right-click the cortina in the setlist and select **Skip Auto-fade** to re-enable manual control for that track.
+
 ---
 
 ## Managing Your Setlist
@@ -139,6 +141,7 @@ Right-click any row:
 | **Stop after Playing** | Sets a stop marker — playback halts automatically when this track finishes. Shows as **Resume after Playing** when already set; click again to clear it. |
 | **Delete** | Removes the track from the setlist (asks for confirmation) |
 | **Ignore Auto-gap before this Track** | Disables auto-gap for this track only. Shows as **Resume Auto-gap** when already set; click again to re-enable it. |
+| **Skip Auto-fade** | Disables auto-fade for this cortina track only, re-enabling the Fade & Stop and Fade & Continue buttons for manual control. Available only when Auto-fade is enabled and fading has not yet started. |
 
 > **Screenshot placeholder:** right-click context menu on a setlist row
 
@@ -163,6 +166,7 @@ A status bar at the bottom of the track list shows:
 - **Total duration** — the combined length of all remaining unplayed tracks
 - **Estimated end time** — a projected clock time when the setlist will finish, calculated from the current elapsed position, all remaining queued tracks, and any stop-after marker (e.g. "Ends ~23:45")
 - **Auto-gap status** — when auto-gap is enabled, a small green dot and "Auto-gap: on" label appear. The dot turns grey and the label reads "Auto-gap: off" when the feature is disabled.
+- **Auto-fade status** — when auto-fade is enabled, a small orange dot and "Auto-fade: on" label appear alongside the auto-gap indicator. The dot turns grey and the label reads "Auto-fade: off" when the feature is disabled.
 
 ---
 
@@ -196,6 +200,38 @@ Three places in the UI reflect auto-gap state:
 | **Filled green wave icon** on a track row | Auto-gap silence was successfully scheduled before this track |
 | **Outlined grey wave icon** on a track row | Auto-gap was skipped or ignored for this track (first track with "Skip gap before first track" on, or per-track override active) |
 | *(no icon)* | Auto-gap not applicable to this track |
+
+---
+
+## Auto-Fade Cortinas
+
+Auto-fade automatically fades out a cortina and advances to the next track after a configurable play time — useful when you want cortinas to end cleanly without manual intervention.
+
+### Enabling Auto-Fade
+
+1. Go to **Settings › Player**
+2. Under **Built-in Player**, enable the **Auto-fade all cortinas** toggle
+3. Use the **Cortina play time** slider to set how many seconds of the cortina should play before the fade begins (5–120 s; default 30 s)
+
+When a cortina starts, an orange marker appears on the seek bar to show exactly when the fade will trigger.
+
+> **Short cortinas:** If a cortina is shorter than the play time plus the fade duration, TangoDisplay adjusts automatically — the fade starts early enough to complete before the track ends.
+
+### Fade Buttons and Auto-Fade
+
+When auto-fade is enabled for a cortina, the **Fade & Stop** and **Fade & Continue** buttons in the player controls are disabled — the auto-fade will handle the transition at the right moment. Once the fade begins, it cannot be interrupted.
+
+### Per-Track Override
+
+Right-click any cortina row in the setlist and select **Skip Auto-fade** to disable auto-fade for that track only. The orange seek-bar marker disappears and the fade buttons become active for manual control. The option is hidden once the fade has already started.
+
+### Reading the Indicators
+
+| Indicator | What it means |
+|---|---|
+| **Orange marker on seek bar** | The point at which auto-fade will begin for the current cortina |
+| **Setlist footer orange dot** | Orange dot + "Auto-fade: on" = feature active. Grey dot + "Auto-fade: off" = feature disabled. |
+| **Fade buttons (disabled)** | Auto-fade is scheduled — the transition will happen automatically |
 
 ---
 
@@ -308,6 +344,10 @@ These options appear only when **Built-in Player** is selected.
 **Minimum gap** — the target gap duration in seconds (0.5–5 s, in 0.5-second steps). Default: 4 seconds. Visible only when Auto-gap is enabled.
 
 **Skip gap before first track** — when on (default), the first track in the setlist starts immediately with no silence preroll. The gap applies only between consecutive tracks.
+
+**Auto-fade all cortinas** — when enabled, TangoDisplay automatically fades out cortinas and advances to the next track at the configured play time. Requires cortina detection to be set up via Cortina Rules.
+
+**Cortina play time** — how many seconds of a cortina should play before the auto-fade begins (5–120 s, in 1-second steps). Default: 30 seconds. Visible only when Auto-fade is enabled. For cortinas shorter than play time + fade duration, the fade starts earlier so it always completes cleanly.
 
 **Mark as played** — controls when a track receives its played stamp:
 

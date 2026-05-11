@@ -59,7 +59,7 @@ Polls JRiver's MCWS HTTP API at `127.0.0.1:52199` every 2 seconds. Full playlist
 
 ### Built-in Player
 
-TangoDisplay plays audio directly — no external player required. Build a setlist by dragging tracks from Finder, Music.app, or Swinsian. All display automation (cortina detection, tanda counting, coming-up preview, artwork) is fully integrated. Additional features: 5-band EQ, audio output routing, Fade & Stop / Fade & Continue cortina transitions, and accidental-stop protection.
+TangoDisplay plays audio directly — no external player required. Build a setlist by dragging tracks from Finder, Music.app, or Swinsian. All display automation (cortina detection, tanda counting, coming-up preview, artwork) is fully integrated. Additional features: 5-band EQ, audio output routing, Fade & Stop / Fade & Continue cortina transitions, auto-fade cortinas, and accidental-stop protection.
 
 See the [Built-In Player](Built-In-Player) guide for full details.
 

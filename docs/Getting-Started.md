@@ -13,7 +13,7 @@
 ### Option A — Download (easiest)
 
 1. Go to the [Releases](https://github.com/richardsladetdj-creator/TangoDisplay/releases) page
-2. Download `TangoDisplay-v3.1.0-universal.zip`
+2. Download `TangoDisplay-v3.8.0-universal.zip`
 3. Unzip and drag `TangoDisplay.app` to `/Applications`
 4. **Right-click › Open** on first launch — macOS will warn that the app isn't notarised; click **Open** to proceed
 
