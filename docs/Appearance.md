@@ -33,6 +33,7 @@ Set the color of each element on the dancer display:
 | **Cortina artist** | The cortina track's own artist (when cortina track display is enabled) |
 | **Cortina title** | The cortina track's own title (when cortina track display is enabled) |
 | **Idle message** | The text shown when nothing is playing |
+| **Last Tanda label** | The Last Tanda announcement text when Last Tanda mode is active |
 
 Click any color swatch to open the macOS color picker.
 
@@ -135,6 +136,23 @@ A **Singer** font row appears below the source picker so you can set the typefac
 
 ---
 
+## Last Tanda
+
+Configure the Last Tanda announcement label — displayed on the dancer screen when Last Tanda mode is active.
+
+| Setting | Description |
+|---|---|
+| **Label text** | The text shown on the dancer display (e.g. LAST TANDA). Stored globally, not per-profile. Leaving this blank disables the Last Tanda toggle on the Live screen. |
+| **Color** | Color of the label text |
+| **Font** | Typeface, size, bold, and italic for the label |
+| **Show in display** | Per-profile master switch — when off, the label never appears even if Last Tanda mode is active. Also disables the Last Tanda toggle on the Live screen for this profile. |
+
+> **Label text** is shared across all profiles. **Color**, **Font**, and **Show in display** are saved per-profile.
+
+The label's vertical position within the dance track and cortina coming-up layouts is controlled in **Text Order** below.
+
+---
+
 ## Text Order
 
 ![Appearance — text order](https://raw.githubusercontent.com/richardsladetdj-creator/TangoDisplay/main/docs/screenshots/appearance-textorder-v240.png)
@@ -149,11 +167,11 @@ Control the vertical order in which text items appear on the dancer display. The
 
 Each section lists the available items. Use the **↑** and **↓** chevron buttons on the right of each row to move items up or down. Changes take effect on the dancer display immediately.
 
-**Dance Tracks** items: Genre, Artist, Year, Title, Singer (default order matches the original layout)
+**Dance Tracks** items: Genre, Artist, Year, Title, Singer, Last Tanda Label
 
 **Cortinas — Cortina Track** items: Cortina Label, Cortina Artist, Cortina Title (default order: label first, then artist, then title). Only visible when **Show cortina track during cortina** is enabled in Field Visibility.
 
-**Cortinas — Coming Up** items: Next Up Label, Genre, Artist, Year, Singer, Title. The Next Up Label ("COMING UP" heading) is now an orderable item — move it anywhere in the preview block.
+**Cortinas — Coming Up** items: Next Up Label, Genre, Artist, Year, Singer, Title, Last Tanda Label. The Next Up Label ("COMING UP" heading) is an orderable item — move it anywhere in the preview block.
 
 ---
 
