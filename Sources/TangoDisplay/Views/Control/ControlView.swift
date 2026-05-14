@@ -132,14 +132,14 @@ struct ControlView: View {
                 sidebarRow(.live)
                 sidebarRow(.setlist)
             }
-            Section("Settings") {
+            Section("Global Settings") {
                 sidebarRow(.cortinaRules)
-                sidebarRow(.appearance)
                 sidebarRow(.display)
                 sidebarRow(.player)
                 sidebarRow(.advanced)
             }
-            Section("Profiles") {
+            Section("Profile Settings") {
+                sidebarRow(.appearance)
                 sidebarRow(.profiles)
             }
         }

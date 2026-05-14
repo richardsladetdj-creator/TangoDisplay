@@ -9,33 +9,29 @@ struct ProfilesView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            List {
-                Section {
-                    ForEach(AppearanceProfile.builtIns) { profile in
-                        profileRow(profile, isBuiltIn: true)
-                    }
-                } header: {
-                    Text("Built-in")
-                        .foregroundColor(ControlTheme.accent)
-                }
-
-                if !appState.profileStore.userProfiles.isEmpty {
-                    Section {
-                        ForEach(appState.profileStore.userProfiles) { profile in
-                            profileRow(profile, isBuiltIn: false)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    sectionHeader("Built-in")
+                    VStack(spacing: 2) {
+                        ForEach(AppearanceProfile.builtIns) { profile in
+                            profileRow(profile, isBuiltIn: true)
                         }
-                        .onDelete { indexSet in
-                            if let idx = indexSet.first {
-                                profileToDelete = appState.profileStore.userProfiles[idx]
+                    }
+                    .padding(.horizontal, 12)
+
+                    if !appState.profileStore.userProfiles.isEmpty {
+                        sectionHeader("Custom")
+                            .padding(.top, 20)
+                        VStack(spacing: 2) {
+                            ForEach(appState.profileStore.userProfiles) { profile in
+                                profileRow(profile, isBuiltIn: false)
                             }
                         }
-                    } header: {
-                        Text("Custom")
-                            .foregroundColor(ControlTheme.accent)
+                        .padding(.horizontal, 12)
                     }
                 }
+                .padding(.vertical, 12)
             }
-            .listStyle(.inset)
 
             Divider()
 
@@ -66,38 +62,64 @@ struct ProfilesView: View {
         }
     }
 
+    private func sectionHeader(_ title: String) -> some View {
+        Text(title)
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundColor(ControlTheme.accent)
+            .padding(.horizontal, 16)
+            .padding(.bottom, 6)
+    }
+
     private func profileRow(_ profile: AppearanceProfile, isBuiltIn: Bool) -> some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 6) {
-                    Text(profile.name)
-                        .font(.system(size: 13, weight: .semibold))
-                    if appState.settings.activeProfileID == profile.id {
-                        Text("Active")
-                            .font(.system(size: 10, weight: .semibold))
-                            .foregroundColor(.white)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(Color.accentColor)
-                            .clipShape(Capsule())
-                    }
+        let isActive = appState.settings.activeProfileID == profile.id
+        return HStack(spacing: 10) {
+            colorSwatch(profile)
+
+            HStack(spacing: 6) {
+                Text(profile.name)
+                    .font(.system(size: 13, weight: .semibold))
+                if isActive {
+                    Text("Active")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color.accentColor)
+                        .clipShape(Capsule())
                 }
-                colorSwatch(profile)
             }
+
             Spacer()
+
             if !isBuiltIn {
-                Button(role: .destructive) { profileToDelete = profile } label: {
+                Button { profileToDelete = profile } label: {
                     Image(systemName: "trash")
+                        .foregroundColor(.secondary)
                 }
                 .buttonStyle(.borderless)
             }
+
             Button("Apply") {
                 appState.settings.activeProfileID = profile.id
             }
             .buttonStyle(.bordered)
-            .disabled(appState.settings.activeProfileID == profile.id)
+            .disabled(isActive)
         }
-        .padding(.vertical, 4)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(isActive
+                      ? ControlTheme.accent.opacity(0.08)
+                      : Color(nsColor: .controlBackgroundColor))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .strokeBorder(
+                            isActive ? ControlTheme.accent.opacity(0.55) : Color.clear,
+                            lineWidth: 1.5
+                        )
+                )
+        )
     }
 
     private func colorSwatch(_ profile: AppearanceProfile) -> some View {
@@ -105,7 +127,7 @@ struct ProfilesView: View {
             ForEach([profile.backgroundColor, profile.artistColor, profile.genreColor], id: \.self) { hex in
                 Circle()
                     .fill(Color(hex: hex))
-                    .frame(width: 12, height: 12)
+                    .frame(width: 14, height: 14)
                     .overlay(Circle().strokeBorder(Color.secondary.opacity(0.3), lineWidth: 0.5))
             }
         }
@@ -149,7 +171,6 @@ struct ProfilesView: View {
         let trimmed = newProfileName.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else { return }
 
-        // Clone the currently active profile with a new name and ID
         let all = appState.profileStore.allProfiles
         var base = all.first(where: { $0.id == appState.settings.activeProfileID }) ?? .classic
         base.id = UUID()

@@ -48,7 +48,7 @@ A native macOS menu-bar app that shows a clean, fullscreen dancer display on an 
 ### Option A — Download pre-built app (easiest)
 
 1. Go to the [Releases](https://github.com/richardsladetdj-creator/TangoDisplay/releases) page
-2. Download `TangoDisplay-v3.12.0-universal.zip` (works on both Apple Silicon and Intel Macs)
+2. Download `TangoDisplay-v3.13.0-universal.zip` (works on both Apple Silicon and Intel Macs)
 3. Unzip and drag `TangoDisplay.app` to your `/Applications` folder
 4. **Right-click › Open** on first launch (required because the app is ad-hoc signed, not notarised)
 5. Grant the permissions macOS requests (see [Permissions](#permissions) below)
@@ -134,6 +134,10 @@ Key design decisions:
 ---
 
 ## Changelog
+
+### v3.13.0
+- **Improvement (Control Window):** Sidebar navigation sections renamed — "Settings" is now "Global Settings" and "Profiles" is now "Profile Settings". The Appearance settings item has moved into the Profile Settings section, reflecting that appearance is per-profile.
+- **Improvement (Profiles):** The profile list has been redesigned with improved layout — color swatches now appear at the leading edge of each row, the active profile is highlighted with a subtle accent-color background, and section headers use consistent styling.
 
 ### v3.12.0
 - **New (Appearance):** Two new transition styles — **Push** (slides the new content in from the right as the old content exits left) and **Zoom** (new content scales up from small, old content scales out large). Both are available in **Appearance › Artwork & Motion › Transition › Style**.

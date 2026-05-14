@@ -22,9 +22,9 @@ Click **Apply** to activate a built-in profile immediately.
 
 ## Custom profiles
 
-Your saved profiles appear in the **Custom** section. Each profile shows three color swatches (background, artist, title) at a glance.
+Your saved profiles appear in the **Custom** section. Each profile row shows three color swatches (background, artist, genre) at the leading edge, followed by the profile name.
 
-- The currently active profile is marked with an **Active** badge
+- The currently active profile is highlighted with an accent-color background and border, and marked with an **Active** badge
 - Click **Apply** to switch to that profile
 - Click the bin icon to delete a custom profile (built-in profiles cannot be deleted)
 
