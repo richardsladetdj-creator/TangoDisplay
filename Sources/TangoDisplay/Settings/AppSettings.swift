@@ -108,6 +108,19 @@ final class AppSettings: ObservableObject {
 
     var eqGains: [Float] { [eqBand0Gain, eqBand1Gain, eqBand2Gain, eqBand3Gain, eqBand4Gain] }
 
+    @Published var replayGainMode: ReplayGainMode {
+        didSet { UserDefaults.standard.set(replayGainMode.rawValue, forKey: kPrefix + "replayGainMode") }
+    }
+    @Published var replayGainPreampDb: Float {
+        didSet { UserDefaults.standard.set(replayGainPreampDb, forKey: kPrefix + "replayGainPreampDb") }
+    }
+    @Published var replayGainPreventClipping: Bool {
+        didSet { UserDefaults.standard.set(replayGainPreventClipping, forKey: kPrefix + "replayGainPreventClipping") }
+    }
+    @Published var replayGainTargetLufs: Float {
+        didSet { UserDefaults.standard.set(replayGainTargetLufs, forKey: kPrefix + "replayGainTargetLufs") }
+    }
+
     @Published var markAsPlayedAfterCompletion: Bool {
         didSet { UserDefaults.standard.set(markAsPlayedAfterCompletion, forKey: kPrefix + "markAsPlayedAfterCompletion") }
     }
@@ -223,6 +236,11 @@ final class AppSettings: ObservableObject {
         eqBand2Gain = ud.object(forKey: kPrefix + "eqBand2Gain").flatMap { $0 as? Float } ?? 0.0
         eqBand3Gain = ud.object(forKey: kPrefix + "eqBand3Gain").flatMap { $0 as? Float } ?? 0.0
         eqBand4Gain = ud.object(forKey: kPrefix + "eqBand4Gain").flatMap { $0 as? Float } ?? 0.0
+        let rawRGMode = ud.string(forKey: kPrefix + "replayGainMode") ?? ""
+        replayGainMode = ReplayGainMode(rawValue: rawRGMode) ?? .off
+        replayGainPreampDb = ud.object(forKey: kPrefix + "replayGainPreampDb").flatMap { $0 as? Float } ?? 0.0
+        replayGainPreventClipping = ud.object(forKey: kPrefix + "replayGainPreventClipping").flatMap { $0 as? Bool } ?? true
+        replayGainTargetLufs = ud.object(forKey: kPrefix + "replayGainTargetLufs").flatMap { $0 as? Float } ?? -18.0
         markAsPlayedAfterCompletion = ud.object(forKey: kPrefix + "markAsPlayedAfterCompletion")
             .flatMap { $0 as? Bool } ?? false
         let savedSeconds = ud.integer(forKey: kPrefix + "markAsPlayedAfterSeconds")

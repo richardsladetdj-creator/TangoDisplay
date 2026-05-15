@@ -80,6 +80,13 @@ struct PlayerControlsView: View {
                 .foregroundColor(.secondary)
                 .lineLimit(1)
                 .frame(maxWidth: .infinity, alignment: .center)
+            if !player.replayGainStatus.isEmpty {
+                Text(player.replayGainStatus)
+                    .font(.system(size: 10))
+                    .foregroundColor(.secondary.opacity(0.75))
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity, alignment: .center)
+            }
         }
     }
 

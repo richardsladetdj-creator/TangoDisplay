@@ -497,6 +497,7 @@ final class AppState: ObservableObject {
         lastSeenPersistentID = ""       // force re-evaluation on next poll
         lastSeenTrack = nil
         currentPlayerState = .stopped
+        pollNow()                       // trigger immediately rather than waiting up to 2s
     }
 
     // MARK: - Pause toggle (⌘⇧P)

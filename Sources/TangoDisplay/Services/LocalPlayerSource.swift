@@ -35,11 +35,16 @@ final class LocalPlayerSource: NSObject, ObservableObject, MusicPlayerSource {
         set { _balance = max(-1, min(1, newValue)); applyBalance(_balance) }
     }
 
+    // MARK: - Diagnostics
+
+    @Published private(set) var replayGainStatus: String = ""
+
     // MARK: - Private — audio engine
 
     private let audioEngine = AVAudioEngine()
     private let playerNode = AVAudioPlayerNode()
     private let eq = AVAudioUnitEQ(numberOfBands: 5)
+    private let replayGainMixer = AVAudioMixerNode()
     private let balanceMixer = AVAudioMixerNode()
     private var audioFile: AVAudioFile?
     private var seekOffset: Double = 0
@@ -65,6 +70,11 @@ final class LocalPlayerSource: NSObject, ObservableObject, MusicPlayerSource {
     private var audioStartSampleTime: AVAudioFramePosition = 0
     private var silencePending: Bool = false
 
+    // MARK: - Private — loudness analysis
+
+    private var inFlightAnalysisURLs = Set<URL>()
+    private let loudnessCache = LoudnessAnalysisCache.shared
+
     // MARK: - Init
 
     init(setlist: SetlistManager, settings: AppSettings, volume: Float = 1.0) {
@@ -85,10 +95,12 @@ final class LocalPlayerSource: NSObject, ObservableObject, MusicPlayerSource {
     private func setupAudioEngine() {
         audioEngine.attach(playerNode)
         audioEngine.attach(eq)
+        audioEngine.attach(replayGainMixer)
         audioEngine.attach(balanceMixer)
-        audioEngine.connect(playerNode, to: eq, format: nil)
-        audioEngine.connect(eq, to: balanceMixer, format: nil)
-        audioEngine.connect(balanceMixer, to: audioEngine.mainMixerNode, format: nil)
+        audioEngine.connect(playerNode,      to: eq,              format: nil)
+        audioEngine.connect(eq,              to: replayGainMixer, format: nil)
+        audioEngine.connect(replayGainMixer, to: balanceMixer,    format: nil)
+        audioEngine.connect(balanceMixer,    to: audioEngine.mainMixerNode, format: nil)
 
         let frequencies: [Float]          = [60, 250, 1000, 4000, 12000]
         let filterTypes: [AVAudioUnitEQFilterType] = [.lowShelf, .parametric, .parametric, .parametric, .highShelf]
@@ -116,10 +128,12 @@ final class LocalPlayerSource: NSObject, ObservableObject, MusicPlayerSource {
             if let file = self.audioFile {
                 self.audioEngine.disconnectNodeOutput(self.playerNode)
                 self.audioEngine.disconnectNodeOutput(self.eq)
+                self.audioEngine.disconnectNodeOutput(self.replayGainMixer)
                 self.audioEngine.disconnectNodeOutput(self.balanceMixer)
-                self.audioEngine.connect(self.playerNode, to: self.eq, format: file.processingFormat)
-                self.audioEngine.connect(self.eq, to: self.balanceMixer, format: file.processingFormat)
-                self.audioEngine.connect(self.balanceMixer, to: self.audioEngine.mainMixerNode, format: file.processingFormat)
+                self.audioEngine.connect(self.playerNode,      to: self.eq,              format: file.processingFormat)
+                self.audioEngine.connect(self.eq,              to: self.replayGainMixer, format: file.processingFormat)
+                self.audioEngine.connect(self.replayGainMixer, to: self.balanceMixer,    format: file.processingFormat)
+                self.audioEngine.connect(self.balanceMixer,    to: self.audioEngine.mainMixerNode, format: file.processingFormat)
             }
             do {
                 try self.audioEngine.start()
@@ -166,6 +180,142 @@ final class LocalPlayerSource: NSObject, ObservableObject, MusicPlayerSource {
         balanceMixer.pan = pan
     }
 
+    private func applyReplayGain(for entry: SetlistEntry) {
+        let rgSettings = ReplayGainSettings(
+            mode: settings.replayGainMode,
+            preampDb: Double(settings.replayGainPreampDb),
+            preventClipping: settings.replayGainPreventClipping,
+            targetLoudnessLufs: Double(settings.replayGainTargetLufs)
+        )
+        let info = entry.track.replayGainInfo
+        let cacheKey = loudnessCacheKey(for: entry)
+        let rawAnalysis = cacheKey.flatMap { loudnessCache.result(for: $0) }
+
+        // Recalculate gain from cached integrated loudness if target has changed since analysis
+        let analysis: LoudnessAnalysisResult? = rawAnalysis.map { cached in
+            guard cached.targetLoudnessLufs != rgSettings.targetLoudnessLufs else { return cached }
+            let newGainDb = rgSettings.targetLoudnessLufs - cached.integratedLoudnessLufs
+            return LoudnessAnalysisResult(
+                filePath: cached.filePath, fileSize: cached.fileSize,
+                modifiedDate: cached.modifiedDate, duration: cached.duration,
+                integratedLoudnessLufs: cached.integratedLoudnessLufs,
+                calculatedReplayGainDb: newGainDb,
+                targetLoudnessLufs: rgSettings.targetLoudnessLufs,
+                samplePeak: cached.samplePeak, truePeak: cached.truePeak,
+                analysedAt: cached.analysedAt
+            )
+        }
+
+        let result = calculateReplayGain(info: info, analysis: analysis, settings: rgSettings)
+        replayGainMixer.outputVolume = result.linearGain
+
+        let analysisInFlight = inFlightAnalysisURLs.contains(entry.fileURL)
+        replayGainStatus = replayGainStatusString(result: result, settings: rgSettings,
+                                                   analysisInFlight: analysisInFlight)
+
+        if settings.replayGainMode == .auto,
+           info?.trackGainDb == nil,
+           analysis == nil {
+            queueLoudnessAnalysis(for: entry, isCurrentTrack: true)
+        }
+    }
+
+    private func replayGainStatusString(result: ReplayGainCalculationResult,
+                                         settings: ReplayGainSettings,
+                                         analysisInFlight: Bool) -> String {
+        guard settings.mode != .off else { return "" }
+        switch result.source {
+        case .none:
+            if analysisInFlight { return "ReplayGain: Analysing…" }
+            return settings.mode == .album ? "ReplayGain: No album metadata" : "ReplayGain: No metadata"
+        case .metadataTrack:
+            let suffix = result.clippingProtectionApplied ? " (clipping limited)" : ""
+            return String(format: "ReplayGain: Track %+.1f dB\(suffix)", result.gainDb ?? 0)
+        case .metadataAlbum:
+            let suffix = result.clippingProtectionApplied ? " (clipping limited)" : ""
+            return String(format: "ReplayGain: Album %+.1f dB\(suffix)", result.gainDb ?? 0)
+        case .analysed:
+            let lufsStr = result.integratedLoudnessLufs.map { String(format: " · %.1f LUFS", $0) } ?? ""
+            let suffix = result.clippingProtectionApplied ? " (clipping limited)" : ""
+            return String(format: "ReplayGain: Auto %+.1f dB\(lufsStr)\(suffix)", result.gainDb ?? 0)
+        }
+    }
+
+    private static func analysisStatusForError(_ error: Error) -> String {
+        if error is CancellationError { return "ReplayGain: Cancelled" }
+        switch error as? LoudnessAnalysisError {
+        case .cannotOpenFile:    return "ReplayGain: Cannot read file"
+        case .unsupportedFormat: return "ReplayGain: Unsupported format"
+        case .insufficientData:  return "ReplayGain: Insufficient audio"
+        case .none:              return "ReplayGain: Analysis failed"
+        }
+    }
+
+    private func queueLoudnessAnalysis(for entry: SetlistEntry, isCurrentTrack: Bool) {
+        let url = entry.fileURL
+        guard !inFlightAnalysisURLs.contains(url) else { return }
+        inFlightAnalysisURLs.insert(url)
+        if isCurrentTrack { replayGainStatus = "ReplayGain: Analysing…" }
+
+        let entryID = entry.id
+        let targetLufs = Double(settings.replayGainTargetLufs)
+        let cache = loudnessCache
+
+        Task.detached(priority: .background) { [weak self] in
+            let analysisResult: LoudnessAnalysisResult?
+            let errorStatus: String?
+            do {
+                analysisResult = try await LoudnessAnalyzer.shared.analyse(
+                    url: url, targetLoudnessLufs: targetLufs)
+                errorStatus = nil
+            } catch {
+                analysisResult = nil
+                errorStatus = LocalPlayerSource.analysisStatusForError(error)
+            }
+
+            if let result = analysisResult { cache.store(result) }
+
+            let succeeded = analysisResult != nil
+            let failStatus = errorStatus
+            await MainActor.run { [weak self] in
+                guard let self else { return }
+                self.inFlightAnalysisURLs.remove(url)               // always runs
+                guard self.currentEntryID == entryID else { return }
+                if let currentEntry = self.setlist.entries.first(where: { $0.id == entryID }) {
+                    self.applyReplayGain(for: currentEntry)         // re-reads cache or falls through
+                }
+                if !succeeded, let status = failStatus {
+                    self.replayGainStatus = status
+                }
+            }
+        }
+    }
+
+    private func preAnalyseIfNeeded(_ entry: SetlistEntry) {
+        guard settings.replayGainMode == .auto,
+              entry.track.replayGainInfo?.trackGainDb == nil else { return }
+        if let key = loudnessCacheKey(for: entry),
+           loudnessCache.result(for: key) != nil { return }
+        queueLoudnessAnalysis(for: entry, isCurrentTrack: false)
+    }
+
+    private func loudnessCacheKey(for entry: SetlistEntry) -> LoudnessAnalysisCacheKey? {
+        let path = entry.fileURL.path
+        guard let attrs = try? FileManager.default.attributesOfItem(atPath: path),
+              let fileSize = attrs[.size] as? Int64,
+              let modDate = attrs[.modificationDate] as? Date else { return nil }
+        return LoudnessAnalysisCacheKey(filePath: path, fileSize: fileSize, modifiedDate: modDate)
+    }
+
+    private func reapplyReplayGainIfLoaded() {
+        guard let id = currentEntryID,
+              let entry = setlist.entries.first(where: { $0.id == id }) else {
+            replayGainStatus = ""
+            return
+        }
+        applyReplayGain(for: entry)
+    }
+
     // MARK: - MusicPlayerSource lifecycle
 
     func start() {
@@ -178,6 +328,9 @@ final class LocalPlayerSource: NSObject, ObservableObject, MusicPlayerSource {
         currentEntryID = nil
         isCurrentEntryMarkedAsPlayed = false
         isActivePlaying = false
+        replayGainStatus = ""
+        replayGainMixer.outputVolume = 1.0
+        inFlightAnalysisURLs.removeAll()
         playerNode.stop()
         audioEngine.stop()
         levelMeter.reset()
@@ -279,6 +432,7 @@ final class LocalPlayerSource: NSObject, ObservableObject, MusicPlayerSource {
         currentEntryID = nil
         isCurrentEntryMarkedAsPlayed = false
         isActivePlaying = false
+        replayGainStatus = ""
         playerNode.stop()
         audioFile = nil
         elapsed = 0
@@ -307,6 +461,7 @@ final class LocalPlayerSource: NSObject, ObservableObject, MusicPlayerSource {
         } else {
             currentEntryID = nil
             isActivePlaying = false
+            replayGainStatus = ""
             playerNode.stop()
             audioFile = nil
             elapsed = 0
@@ -392,12 +547,20 @@ final class LocalPlayerSource: NSObject, ObservableObject, MusicPlayerSource {
             audioEngine.stop()
             audioEngine.disconnectNodeOutput(playerNode)
             audioEngine.disconnectNodeOutput(eq)
+            audioEngine.disconnectNodeOutput(replayGainMixer)
             audioEngine.disconnectNodeOutput(balanceMixer)
-            audioEngine.connect(playerNode, to: eq, format: file.processingFormat)
-            audioEngine.connect(eq, to: balanceMixer, format: file.processingFormat)
-            audioEngine.connect(balanceMixer, to: audioEngine.mainMixerNode, format: file.processingFormat)
+            audioEngine.connect(playerNode,      to: eq,              format: file.processingFormat)
+            audioEngine.connect(eq,              to: replayGainMixer, format: file.processingFormat)
+            audioEngine.connect(replayGainMixer, to: balanceMixer,    format: file.processingFormat)
+            audioEngine.connect(balanceMixer,    to: audioEngine.mainMixerNode, format: file.processingFormat)
             try audioEngine.start()
             levelMeter.reinstallTap()
+            applyReplayGain(for: entry)
+
+            // Pre-warm loudness analysis for the next track so it's cached before it starts.
+            if let nextEntry = setlist.entry(after: entry.id) {
+                preAnalyseIfNeeded(nextEntry)
+            }
 
             // Auto-gap: schedule silence before the file if needed.
             // nextTrackSilenceAtStart is pre-populated by the background analysis from the previous track's loadEntry.
@@ -530,6 +693,29 @@ final class LocalPlayerSource: NSObject, ObservableObject, MusicPlayerSource {
             .sink { [weak self] v in self?.balance = v }
             .store(in: &cancellables)
 
+        // receive(on: DispatchQueue.main) defers the sink to the next run-loop cycle so that
+        // the @Published property (which fires in willSet) is fully committed before we read it.
+        settings.$replayGainMode
+            .dropFirst()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.reapplyReplayGainIfLoaded() }
+            .store(in: &cancellables)
+        settings.$replayGainPreampDb
+            .dropFirst()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.reapplyReplayGainIfLoaded() }
+            .store(in: &cancellables)
+        settings.$replayGainPreventClipping
+            .dropFirst()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.reapplyReplayGainIfLoaded() }
+            .store(in: &cancellables)
+        settings.$replayGainTargetLufs
+            .dropFirst()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.reapplyReplayGainIfLoaded() }
+            .store(in: &cancellables)
+
         setlist.$entries
             .receive(on: DispatchQueue.main)
             .sink { [weak self] entries in
@@ -544,6 +730,7 @@ final class LocalPlayerSource: NSObject, ObservableObject, MusicPlayerSource {
                    !entries.contains(where: { $0.id == id }) {
                     self.currentEntryID = nil
                     self.isActivePlaying = false
+                    self.replayGainStatus = ""
                     self.playerNode.stop()
                     self.audioFile = nil
                     self.elapsed = 0

@@ -332,6 +332,44 @@ EQ settings are saved across sessions.
 
 ---
 
+## ReplayGain
+
+ReplayGain adjusts playback volume using loudness metadata so every track sounds equally loud without manual volume tweaking. Click the **ReplayGain** button (waveform icon) in the Setlist toolbar to open the quick-access popover, or go to **Settings › Player › ReplayGain** for the same controls alongside the rest of the player settings.
+
+The ReplayGain button is **never disabled** — you can always reach it to change the mode, even when playback is stopped or mode is currently Off.
+
+### Modes
+
+| Mode | How it works |
+|---|---|
+| **Off** | No gain adjustment is applied. |
+| **Track** | Reads the `REPLAYGAIN_TRACK_GAIN` tag embedded in the audio file and applies it directly. |
+| **Album** | Reads the `REPLAYGAIN_ALBUM_GAIN` tag instead, preserving the relative volume between tracks in an album. |
+| **Auto** *(Recommended)* | Uses embedded ReplayGain tags when present. When a track has no tags, TangoDisplay analyses the audio and calculates the gain needed to reach the **Target Loudness** setting. Analysis runs in the background; a live status line in the player controls shows progress ("Analysing…") and the result once complete (e.g. "Auto +2.3 dB · −18.0 LUFS"). |
+
+### Controls
+
+**Prevent clipping** — when enabled, the calculated gain is capped so the output never exceeds 0 dBFS, regardless of the Preamp setting. On by default.
+
+**Preamp** — a global gain offset applied on top of the ReplayGain value (−12 to +6 dB). Use this to raise or lower the overall volume without touching individual track tags.
+
+**Target Loudness** — the loudness target used when analysing tracks in Auto mode (−23 to −14 LUFS). Only active when mode is set to **Auto**. Default: −18.0 LUFS.
+
+### Live Status Line
+
+While a track is playing with ReplayGain active, a status line appears below the artist name in the player controls showing the active gain adjustment and mode. For example:
+
+- `Auto +2.3 dB · −18.0 LUFS` — gain calculated from analysis
+- `Track −1.5 dB` — gain read from embedded tag
+
+The line clears when playback stops or ReplayGain is set to Off.
+
+### Analysis Cache
+
+Loudness analysis results are cached on disk so each file is only analysed once. Subsequent plays of the same file load instantly from the cache.
+
+---
+
 ## Audio Output
 
 By default the built-in player uses the macOS system default output device. To route audio to a specific device (e.g. a dedicated DJ audio interface):
@@ -400,6 +438,16 @@ These options appear only when **Built-in Player** is selected.
 |---|---|
 | **After song ends** | The track is marked only when it plays all the way to completion |
 | **After…** | The track is marked after a set number of seconds of playback (1–30 seconds). A marker line on the seek bar shows the threshold. Once marked, pressing play again skips to the next queued track. |
+
+### ReplayGain Settings
+
+**ReplayGain mode** — Off, Track, Album, or Auto (recommended). Auto uses embedded tags when present and analyses the file against the target loudness when absent.
+
+**Prevent clipping** — caps the output at 0 dBFS. Active for Track, Album, and Auto modes.
+
+**Preamp** — global gain offset on top of ReplayGain (−12 to +6 dB). Active for Track, Album, and Auto modes.
+
+**Target Loudness** — the LUFS target used when Auto mode analyses a file (−23 to −14 LUFS). Active in Auto mode only.
 
 ### Track Info
 

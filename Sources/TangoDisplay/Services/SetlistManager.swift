@@ -350,6 +350,40 @@ final class SetlistManager: ObservableObject {
         let albumArtistFromiTunes = await string(for: .iTunesMetadataAlbumArtist)
         let albumArtist = albumArtistFromID3 ?? albumArtistFromiTunes
 
+        // ID3 TXXX frame lookup (MP3 ReplayGain). The description/tag-name lives in extraAttributes[.info].
+        func txxx(key: String) async -> String? {
+            let items = AVMetadataItem.metadataItems(from: metadata, filteredByIdentifier: .id3MetadataUserText)
+            for item in items {
+                let attrs = (try? await item.load(.extraAttributes)) ?? [:]
+                guard (attrs[AVMetadataExtraAttributeKey.info] as? String)?.lowercased() == key.lowercased() else { continue }
+                if let val = try? await item.load(.stringValue), !val.isEmpty { return val }
+            }
+            return nil
+        }
+
+        // ReplayGain: Vorbis comments (FLAC) via raw key, ID3 TXXX frames (MP3), M4A raw key fallback.
+        // (await cannot appear inside ?? autoclosures, so each lookup is a separate binding.)
+        let rgTrackGainVorbis = await string(forRawKey: "replaygain_track_gain")
+        let rgTrackGainTxxx   = await txxx(key: "replaygain_track_gain")
+        let rgTrackPeakVorbis = await string(forRawKey: "replaygain_track_peak")
+        let rgTrackPeakTxxx   = await txxx(key: "replaygain_track_peak")
+        let rgAlbumGainVorbis = await string(forRawKey: "replaygain_album_gain")
+        let rgAlbumGainTxxx   = await txxx(key: "replaygain_album_gain")
+        let rgAlbumPeakVorbis = await string(forRawKey: "replaygain_album_peak")
+        let rgAlbumPeakTxxx   = await txxx(key: "replaygain_album_peak")
+        let rgTrackGainStr = rgTrackGainVorbis ?? rgTrackGainTxxx
+        let rgTrackPeakStr = rgTrackPeakVorbis ?? rgTrackPeakTxxx
+        let rgAlbumGainStr = rgAlbumGainVorbis ?? rgAlbumGainTxxx
+        let rgAlbumPeakStr = rgAlbumPeakVorbis ?? rgAlbumPeakTxxx
+        let rgTrackGain = parseReplayGainDb(rgTrackGainStr)
+        let rgTrackPeak = Double(rgTrackPeakStr?.trimmingCharacters(in: .whitespaces) ?? "")
+        let rgAlbumGain = parseReplayGainDb(rgAlbumGainStr)
+        let rgAlbumPeak = Double(rgAlbumPeakStr?.trimmingCharacters(in: .whitespaces) ?? "")
+        let replayGainInfo: ReplayGainInfo? = (rgTrackGain != nil || rgTrackPeak != nil || rgAlbumGain != nil || rgAlbumPeak != nil)
+            ? ReplayGainInfo(trackGainDb: rgTrackGain, trackPeak: rgTrackPeak,
+                             albumGainDb: rgAlbumGain, albumPeak: rgAlbumPeak)
+            : nil
+
         return Track(
             title: title,
             artist: artist,
@@ -357,7 +391,8 @@ final class SetlistManager: ObservableObject {
             persistentID: url.absoluteString,
             year: year,
             comment: comment,
-            albumArtist: albumArtist
+            albumArtist: albumArtist,
+            replayGainInfo: replayGainInfo
         )
     }
 

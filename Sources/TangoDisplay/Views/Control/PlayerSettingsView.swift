@@ -1,4 +1,5 @@
 import SwiftUI
+import TangoDisplayCore
 
 struct PlayerSettingsView: View {
     @EnvironmentObject var appState: AppState
@@ -191,6 +192,35 @@ struct PlayerSettingsView: View {
                         .foregroundColor(.secondary)
                 } header: {
                     Text("Gap")
+                        .foregroundColor(ControlTheme.accent)
+                }
+
+                Section {
+                    ReplayGainModePicker(mode: $settings.replayGainMode)
+                    Toggle("Prevent clipping", isOn: $settings.replayGainPreventClipping)
+                    LabeledContent("Preamp") {
+                        HStack(spacing: 8) {
+                            Slider(value: $settings.replayGainPreampDb, in: -12...6, step: 0.5)
+                            Text(String(format: "%+.1f dB", settings.replayGainPreampDb))
+                                .font(.system(size: 12, design: .monospaced))
+                                .frame(width: 56, alignment: .trailing)
+                        }
+                    }
+                    .disabled(settings.replayGainMode == .off)
+                    LabeledContent("Target Loudness") {
+                        HStack(spacing: 8) {
+                            Slider(value: $settings.replayGainTargetLufs, in: -23...(-14), step: 0.5)
+                            Text(String(format: "%.1f LUFS", settings.replayGainTargetLufs))
+                                .font(.system(size: 12, design: .monospaced))
+                                .frame(width: 72, alignment: .trailing)
+                        }
+                    }
+                    .disabled(settings.replayGainMode != .auto)
+                    Text("ReplayGain adjusts playback volume using loudness metadata stored in the audio file. Auto mode uses metadata when available; when absent it analyses the file and calculates a gain against the target loudness.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                } header: {
+                    Text("ReplayGain")
                         .foregroundColor(ControlTheme.accent)
                 }
 

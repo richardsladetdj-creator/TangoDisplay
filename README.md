@@ -49,7 +49,7 @@ A native macOS menu-bar app that shows a clean, fullscreen dancer display on an 
 ### Option A — Download pre-built app (easiest)
 
 1. Go to the [Releases](https://github.com/richardsladetdj-creator/TangoDisplay/releases) page
-2. Download `TangoDisplay-v3.14.0-universal.zip` (works on both Apple Silicon and Intel Macs)
+2. Download `TangoDisplay-v3.15.0-universal.zip` (works on both Apple Silicon and Intel Macs)
 3. Unzip and drag `TangoDisplay.app` to your `/Applications` folder
 4. **Right-click › Open** on first launch (required because the app is ad-hoc signed, not notarised)
 5. Grant the permissions macOS requests (see [Permissions](#permissions) below)
@@ -135,6 +135,9 @@ Key design decisions:
 ---
 
 ## Changelog
+
+### v3.15.0
+- **New (Built-In Player):** ReplayGain volume normalisation. Enable **ReplayGain** in **Settings › Player › ReplayGain** or via the new **ReplayGain** toolbar button (waveform icon) alongside EQ, Balance, and Auto-gap. Four modes: **Off**, **Track** (uses per-track RG tags), **Album** (uses album RG tags), and **Auto** (recommended — uses metadata when available; analyses the file against a configurable target loudness when absent). Controls include **Prevent clipping**, a **Preamp** slider (−12 to +6 dB), and a **Target Loudness** slider (−23 to −14 LUFS, active in Auto mode). Both the toolbar popover and Player Settings display a **Recommended** badge next to the Auto option. A live status line in the player controls shows the active gain (e.g. "Auto +2.3 dB · −18.0 LUFS") while a track is playing.
 
 ### v3.14.0
 - **New (Appearance):** Artist Backgrounds. Add per-profile artist name → image mappings in **Appearance › Artwork & Motion**. When the playing track's artist contains a configured name (partial, case-insensitive, Unicode-safe match), the matching image is shown as the background instead of the profile background image. Falls back to profile background image, then background colour. Shared opacity, scale, horizontal, and vertical position controls. Active only while a dance track is playing — clears automatically on pause or stop.

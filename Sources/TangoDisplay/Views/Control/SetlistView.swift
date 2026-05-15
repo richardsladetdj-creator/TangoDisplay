@@ -37,6 +37,7 @@ struct SetlistView: View {
     @State private var showEQPopover = false
     @State private var showBalancePopover = false
     @State private var showAutoGapPopover = false
+    @State private var showReplayGainPopover = false
     @State private var scrollTrigger: UUID? = nil
     @State private var showLastTandaWarning = false
 
@@ -250,6 +251,13 @@ struct SetlistView: View {
                     .disabled(!settings.autoGapEnabled)
                     .popover(isPresented: $showAutoGapPopover) {
                         AutoGapPopoverView().environmentObject(settings)
+                    }
+                    Button { showReplayGainPopover.toggle() } label: {
+                        Label("ReplayGain", systemImage: "waveform")
+                    }
+                    .popover(isPresented: $showReplayGainPopover) {
+                        ReplayGainPopoverView(player: player)
+                            .environmentObject(settings)
                     }
                 }
             }

@@ -569,12 +569,355 @@ func runDisplayStateTests() {
     }
 }
 
+// MARK: - ReplayGain tests
+
+func runReplayGainTests() {
+    suite("parseReplayGainDb") {
+        test("parses negative dB with unit") {
+            try expectEqual(parseReplayGainDb("-7.23 dB"), -7.23)
+        }
+        test("parses positive dB with unit") {
+            try expectEqual(parseReplayGainDb("+3.00 dB"), 3.0)
+        }
+        test("parses negative dB without unit") {
+            try expectEqual(parseReplayGainDb("-5.4"), -5.4)
+        }
+        test("parses value with uppercase DB") {
+            try expectEqual(parseReplayGainDb("-2.0 DB"), -2.0)
+        }
+        test("returns nil for non-numeric") {
+            try expectNil(parseReplayGainDb("abc dB"))
+        }
+        test("returns nil for nil input") {
+            try expectNil(parseReplayGainDb(nil))
+        }
+        test("returns nil for empty string") {
+            try expectNil(parseReplayGainDb(""))
+        }
+    }
+
+    suite("calculateReplayGainLinear — mode off") {
+        test("always returns 1.0 when mode is off") {
+            let info = ReplayGainInfo(trackGainDb: -7.0, trackPeak: 0.95, albumGainDb: -6.0, albumPeak: 0.90)
+            let settings = ReplayGainSettings(mode: .off, preampDb: 0, preventClipping: false)
+            try expectEqual(calculateReplayGainLinear(info: info, settings: settings), 1.0)
+        }
+        test("returns 1.0 when mode is off and info is nil") {
+            let settings = ReplayGainSettings(mode: .off, preampDb: 0, preventClipping: false)
+            try expectEqual(calculateReplayGainLinear(info: nil, settings: settings), 1.0)
+        }
+    }
+
+    suite("calculateReplayGainLinear — track gain mode") {
+        test("applies track gain correctly") {
+            let info = ReplayGainInfo(trackGainDb: -6.0206, trackPeak: nil, albumGainDb: nil, albumPeak: nil)
+            let settings = ReplayGainSettings(mode: .track, preampDb: 0, preventClipping: false)
+            let gain = calculateReplayGainLinear(info: info, settings: settings)
+            // -6.0206 dB ≈ 0.5 linear
+            try expect(abs(gain - 0.5) < 0.001, "Expected ~0.5, got \(gain)")
+        }
+        test("returns 1.0 when track gain is missing") {
+            let info = ReplayGainInfo(trackGainDb: nil, trackPeak: 0.95, albumGainDb: -5.0, albumPeak: 0.90)
+            let settings = ReplayGainSettings(mode: .track, preampDb: 0, preventClipping: false)
+            try expectEqual(calculateReplayGainLinear(info: info, settings: settings), 1.0)
+        }
+        test("returns 1.0 when info is nil") {
+            let settings = ReplayGainSettings(mode: .track, preampDb: 0, preventClipping: false)
+            try expectEqual(calculateReplayGainLinear(info: nil, settings: settings), 1.0)
+        }
+        test("returns 1.0 when all fields are nil") {
+            let info = ReplayGainInfo(trackGainDb: nil, trackPeak: nil, albumGainDb: nil, albumPeak: nil)
+            let settings = ReplayGainSettings(mode: .track, preampDb: 0, preventClipping: false)
+            try expectEqual(calculateReplayGainLinear(info: info, settings: settings), 1.0)
+        }
+    }
+
+    suite("calculateReplayGainLinear — album gain mode") {
+        test("applies album gain correctly") {
+            let info = ReplayGainInfo(trackGainDb: -7.0, trackPeak: 0.95, albumGainDb: -5.0, albumPeak: 0.90)
+            let settings = ReplayGainSettings(mode: .album, preampDb: 0, preventClipping: false)
+            let gain = calculateReplayGainLinear(info: info, settings: settings)
+            let expected = Float(pow(10.0, -5.0 / 20.0))
+            try expect(abs(gain - expected) < 0.0001, "Expected \(expected), got \(gain)")
+        }
+        test("returns 1.0 when album gain is missing even if track gain is present") {
+            let info = ReplayGainInfo(trackGainDb: -7.0, trackPeak: 0.95, albumGainDb: nil, albumPeak: nil)
+            let settings = ReplayGainSettings(mode: .album, preampDb: 0, preventClipping: false)
+            try expectEqual(calculateReplayGainLinear(info: info, settings: settings), 1.0)
+        }
+    }
+
+    suite("calculateReplayGainLinear — preamp") {
+        test("adds preamp dB to gain") {
+            let info = ReplayGainInfo(trackGainDb: 0.0, trackPeak: nil, albumGainDb: nil, albumPeak: nil)
+            let settings = ReplayGainSettings(mode: .track, preampDb: 6.0, preventClipping: false)
+            let gain = calculateReplayGainLinear(info: info, settings: settings)
+            let expected = Float(pow(10.0, 6.0 / 20.0))
+            try expect(abs(gain - expected) < 0.0001, "Expected \(expected), got \(gain)")
+        }
+        test("negative preamp reduces gain") {
+            let info = ReplayGainInfo(trackGainDb: 0.0, trackPeak: nil, albumGainDb: nil, albumPeak: nil)
+            let settings = ReplayGainSettings(mode: .track, preampDb: -6.0, preventClipping: false)
+            let gain = calculateReplayGainLinear(info: info, settings: settings)
+            let expected = Float(pow(10.0, -6.0 / 20.0))
+            try expect(abs(gain - expected) < 0.0001, "Expected \(expected), got \(gain)")
+        }
+    }
+
+    suite("calculateReplayGainLinear — clipping protection") {
+        test("reduces gain when gain * peak exceeds 1.0") {
+            // +4 dB gain with peak 0.90 → linear ≈ 1.585 * 0.90 > 1.0, should clamp to 1/0.90
+            let info = ReplayGainInfo(trackGainDb: 4.0, trackPeak: 0.90, albumGainDb: nil, albumPeak: nil)
+            let settings = ReplayGainSettings(mode: .track, preampDb: 0, preventClipping: true)
+            let gain = calculateReplayGainLinear(info: info, settings: settings)
+            let maxGain = Float(1.0 / 0.90)
+            try expect(abs(gain - maxGain) < 0.0001, "Expected \(maxGain), got \(gain)")
+        }
+        test("does not reduce gain when clipping protection is off") {
+            let info = ReplayGainInfo(trackGainDb: 4.0, trackPeak: 0.90, albumGainDb: nil, albumPeak: nil)
+            let settings = ReplayGainSettings(mode: .track, preampDb: 0, preventClipping: false)
+            let gain = calculateReplayGainLinear(info: info, settings: settings)
+            let expected = Float(pow(10.0, 4.0 / 20.0))
+            try expect(abs(gain - expected) < 0.0001, "Expected \(expected), got \(gain)")
+        }
+        test("no clipping reduction needed when gain * peak is within 1.0") {
+            // -7.23 dB gain with peak 0.95 → linear ≈ 0.436 * 0.95 < 1.0, no clamping
+            let info = ReplayGainInfo(trackGainDb: -7.23, trackPeak: 0.95, albumGainDb: nil, albumPeak: nil)
+            let settings = ReplayGainSettings(mode: .track, preampDb: 0, preventClipping: true)
+            let gain = calculateReplayGainLinear(info: info, settings: settings)
+            let expected = Float(pow(10.0, -7.23 / 20.0))
+            try expect(abs(gain - expected) < 0.0001, "Expected \(expected), got \(gain)")
+        }
+        test("skips clipping check when peak is nil") {
+            let info = ReplayGainInfo(trackGainDb: 4.0, trackPeak: nil, albumGainDb: nil, albumPeak: nil)
+            let settings = ReplayGainSettings(mode: .track, preampDb: 0, preventClipping: true)
+            let gain = calculateReplayGainLinear(info: info, settings: settings)
+            let expected = Float(pow(10.0, 4.0 / 20.0))
+            try expect(abs(gain - expected) < 0.0001, "Expected \(expected), got \(gain)")
+        }
+    }
+}
+
+// MARK: - Auto ReplayGain tests
+
+func runAutoReplayGainTests() {
+
+    // MARK: Helpers
+
+    func makeAnalysis(gainDb: Double, lufs: Double, samplePeak: Double? = nil,
+                      truePeak: Double? = nil) -> LoudnessAnalysisResult {
+        LoudnessAnalysisResult(
+            filePath: "/fake/track.flac", fileSize: 1_000_000,
+            modifiedDate: Date(), duration: 180,
+            integratedLoudnessLufs: lufs, calculatedReplayGainDb: gainDb,
+            targetLoudnessLufs: -18.0,
+            samplePeak: samplePeak, truePeak: truePeak, analysedAt: Date())
+    }
+
+    func baseSettings(mode: ReplayGainMode, preventClipping: Bool = false,
+                       preamp: Double = 0) -> ReplayGainSettings {
+        ReplayGainSettings(mode: mode, preampDb: preamp,
+                           preventClipping: preventClipping, targetLoudnessLufs: -18.0)
+    }
+
+    // MARK: calculateReplayGain — auto mode
+
+    suite("calculateReplayGain — auto mode") {
+        test("uses track metadata when present, ignores analysis") {
+            let info = ReplayGainInfo(trackGainDb: -7.0, trackPeak: nil, albumGainDb: -5.0, albumPeak: nil)
+            let analysis = makeAnalysis(gainDb: -3.0, lufs: -15.0)
+            let result = calculateReplayGain(info: info, analysis: analysis,
+                                              settings: baseSettings(mode: .auto))
+            try expectEqual(result.source, .metadataTrack)
+            let expected = Float(pow(10.0, -7.0 / 20.0))
+            try expect(abs(result.linearGain - expected) < 0.0001,
+                       "Expected ~\(expected), got \(result.linearGain)")
+        }
+
+        test("uses analysis when track metadata is absent") {
+            let info = ReplayGainInfo(trackGainDb: nil, trackPeak: nil, albumGainDb: nil, albumPeak: nil)
+            let analysis = makeAnalysis(gainDb: -7.1, lufs: -10.9)
+            let result = calculateReplayGain(info: info, analysis: analysis,
+                                              settings: baseSettings(mode: .auto))
+            try expectEqual(result.source, .analysed)
+            let expected = Float(pow(10.0, -7.1 / 20.0))
+            try expect(abs(result.linearGain - expected) < 0.0001,
+                       "Expected ~\(expected), got \(result.linearGain)")
+        }
+
+        test("does not use album metadata in auto mode") {
+            let info = ReplayGainInfo(trackGainDb: nil, trackPeak: nil, albumGainDb: -5.0, albumPeak: nil)
+            let result = calculateReplayGain(info: info, analysis: nil,
+                                              settings: baseSettings(mode: .auto))
+            try expectEqual(result.source, .none)
+            try expectEqual(result.linearGain, 1.0)
+        }
+
+        test("returns 1.0 when neither metadata nor analysis present") {
+            let result = calculateReplayGain(info: nil, analysis: nil,
+                                              settings: baseSettings(mode: .auto))
+            try expectEqual(result.source, .none)
+            try expectEqual(result.linearGain, 1.0)
+        }
+
+        test("integratedLoudnessLufs populated for analysed source") {
+            let info = ReplayGainInfo(trackGainDb: nil, trackPeak: nil, albumGainDb: nil, albumPeak: nil)
+            let analysis = makeAnalysis(gainDb: -7.1, lufs: -10.9)
+            let result = calculateReplayGain(info: info, analysis: analysis,
+                                              settings: baseSettings(mode: .auto))
+            try expect(result.integratedLoudnessLufs != nil, "Expected integratedLoudnessLufs to be set")
+            try expect(abs(result.integratedLoudnessLufs! - (-10.9)) < 0.001,
+                       "Expected -10.9, got \(result.integratedLoudnessLufs!)")
+        }
+
+        test("integratedLoudnessLufs is nil for metadata source") {
+            let info = ReplayGainInfo(trackGainDb: -7.0, trackPeak: nil, albumGainDb: nil, albumPeak: nil)
+            let result = calculateReplayGain(info: info, analysis: nil,
+                                              settings: baseSettings(mode: .auto))
+            try expectNil(result.integratedLoudnessLufs)
+        }
+    }
+
+    // MARK: calculateReplayGain — mode isolation
+
+    suite("calculateReplayGain — mode isolation") {
+        test("track mode ignores analysis") {
+            let info = ReplayGainInfo(trackGainDb: -7.0, trackPeak: nil, albumGainDb: nil, albumPeak: nil)
+            let analysis = makeAnalysis(gainDb: -3.0, lufs: -15.0)
+            let result = calculateReplayGain(info: info, analysis: analysis,
+                                              settings: baseSettings(mode: .track))
+            try expectEqual(result.source, .metadataTrack)
+        }
+
+        test("album mode ignores analysis") {
+            let info = ReplayGainInfo(trackGainDb: nil, trackPeak: nil, albumGainDb: -5.0, albumPeak: nil)
+            let analysis = makeAnalysis(gainDb: -3.0, lufs: -15.0)
+            let result = calculateReplayGain(info: info, analysis: analysis,
+                                              settings: baseSettings(mode: .album))
+            try expectEqual(result.source, .metadataAlbum)
+        }
+
+        test("off mode ignores metadata and analysis") {
+            let info = ReplayGainInfo(trackGainDb: -7.0, trackPeak: nil, albumGainDb: -5.0, albumPeak: nil)
+            let analysis = makeAnalysis(gainDb: -3.0, lufs: -15.0)
+            let result = calculateReplayGain(info: info, analysis: analysis,
+                                              settings: baseSettings(mode: .off))
+            try expectEqual(result.source, .none)
+            try expectEqual(result.linearGain, 1.0)
+        }
+    }
+
+    // MARK: calculateReplayGain — preamp with analysis
+
+    suite("calculateReplayGain — preamp with analysed gain") {
+        test("preamp applies to analysed gain") {
+            let info = ReplayGainInfo(trackGainDb: nil, trackPeak: nil, albumGainDb: nil, albumPeak: nil)
+            let analysis = makeAnalysis(gainDb: -7.0, lufs: -11.0)
+            let result = calculateReplayGain(info: info, analysis: analysis,
+                                              settings: baseSettings(mode: .auto, preamp: 2.0))
+            let expected = Float(pow(10.0, (-7.0 + 2.0) / 20.0))
+            try expect(abs(result.linearGain - expected) < 0.0001,
+                       "Expected ~\(expected), got \(result.linearGain)")
+        }
+    }
+
+    // MARK: calculateReplayGain — clipping with analysis peaks
+
+    suite("calculateReplayGain — clipping protection with analysed peaks") {
+        test("uses samplePeak for clipping protection") {
+            // gain +4 dB * samplePeak 0.90 > 1.0 → clamp to 1/0.90
+            let info = ReplayGainInfo(trackGainDb: nil, trackPeak: nil, albumGainDb: nil, albumPeak: nil)
+            let analysis = makeAnalysis(gainDb: 4.0, lufs: -22.0, samplePeak: 0.90)
+            let result = calculateReplayGain(info: info, analysis: analysis,
+                                              settings: baseSettings(mode: .auto, preventClipping: true))
+            let maxGain = Float(1.0 / 0.90)
+            try expect(result.clippingProtectionApplied, "Expected clipping protection to be applied")
+            try expect(abs(result.linearGain - maxGain) < 0.0001,
+                       "Expected \(maxGain), got \(result.linearGain)")
+        }
+
+        test("prefers truePeak over samplePeak when both present") {
+            let info = ReplayGainInfo(trackGainDb: nil, trackPeak: nil, albumGainDb: nil, albumPeak: nil)
+            // truePeak is lower than samplePeak → truePeak is the binding constraint
+            let analysis = makeAnalysis(gainDb: 4.0, lufs: -22.0, samplePeak: 0.90, truePeak: 0.85)
+            let result = calculateReplayGain(info: info, analysis: analysis,
+                                              settings: baseSettings(mode: .auto, preventClipping: true))
+            let maxGain = Float(1.0 / 0.85)
+            try expect(result.clippingProtectionApplied, "Expected clipping protection to be applied")
+            try expect(abs(result.linearGain - maxGain) < 0.0001,
+                       "Expected \(maxGain) (truePeak), got \(result.linearGain)")
+        }
+
+        test("clipping off — full gain applied even when would clip") {
+            let info = ReplayGainInfo(trackGainDb: nil, trackPeak: nil, albumGainDb: nil, albumPeak: nil)
+            let analysis = makeAnalysis(gainDb: 4.0, lufs: -22.0, samplePeak: 0.90)
+            let result = calculateReplayGain(info: info, analysis: analysis,
+                                              settings: baseSettings(mode: .auto, preventClipping: false))
+            let expected = Float(pow(10.0, 4.0 / 20.0))
+            try expect(!result.clippingProtectionApplied, "Expected no clipping protection")
+            try expect(abs(result.linearGain - expected) < 0.0001,
+                       "Expected \(expected), got \(result.linearGain)")
+        }
+    }
+
+    // MARK: LoudnessAnalysisCacheKey equality
+
+    suite("LoudnessAnalysisCacheKey — equality (path + size + modDate only)") {
+        let date = Date(timeIntervalSince1970: 1_700_000_000)
+        let key = LoudnessAnalysisCacheKey(filePath: "/music/track.flac",
+                                            fileSize: 10_000_000,
+                                            modifiedDate: date)
+
+        test("identical keys are equal") {
+            let key2 = LoudnessAnalysisCacheKey(filePath: "/music/track.flac",
+                                                 fileSize: 10_000_000,
+                                                 modifiedDate: date)
+            try expect(key == key2, "Keys with same fields should be equal")
+        }
+
+        test("mismatch on fileSize") {
+            let key2 = LoudnessAnalysisCacheKey(filePath: "/music/track.flac",
+                                                 fileSize: 9_999_999,
+                                                 modifiedDate: date)
+            try expect(key != key2, "Keys should differ when fileSize changes")
+        }
+
+        test("mismatch on modifiedDate") {
+            let key2 = LoudnessAnalysisCacheKey(filePath: "/music/track.flac",
+                                                 fileSize: 10_000_000,
+                                                 modifiedDate: Date(timeIntervalSince1970: 1_700_000_001))
+            try expect(key != key2, "Keys should differ when modifiedDate changes")
+        }
+
+        test("duration variation does not affect key — prevents spurious cache misses") {
+            // AVAudioFile may report slightly different frame counts across codec versions.
+            // Cache key must be stable regardless of decoded duration precision.
+            let k1 = LoudnessAnalysisCacheKey(filePath: "/music/a.m4a",
+                                               fileSize: 5_000_000,
+                                               modifiedDate: date)
+            let k2 = LoudnessAnalysisCacheKey(filePath: "/music/a.m4a",
+                                               fileSize: 5_000_000,
+                                               modifiedDate: date)
+            try expect(k1 == k2, "Keys must be equal regardless of any duration value")
+        }
+
+        test("mismatch on filePath") {
+            let key2 = LoudnessAnalysisCacheKey(filePath: "/music/other.flac",
+                                                 fileSize: 10_000_000,
+                                                 modifiedDate: date)
+            try expect(key != key2, "Keys should differ when filePath changes")
+        }
+    }
+}
+
 // MARK: - Main entry point
 
 runCortinaDetectorTests()
 runTandaTrackerTests()
 runProfileStoreTests()
 runDisplayStateTests()
+runReplayGainTests()
+runAutoReplayGainTests()
 
 print("\n════════════════════════════════")
 let icon = totalFailed == 0 ? "✓" : "✗"
