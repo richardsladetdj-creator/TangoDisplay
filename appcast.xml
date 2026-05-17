@@ -4,6 +4,18 @@
         <title>TangoDisplay</title>
         <link>https://github.com/richardsladetdj-creator/TangoDisplay</link>
         <item>
+            <title>Version 3.16.0</title>
+            <pubDate>Sat, 17 May 2026 11:25:00 +0000</pubDate>
+            <sparkle:version>50</sparkle:version>
+            <sparkle:shortVersionString>3.16.0</sparkle:shortVersionString>
+            <sparkle:releaseNotesLink>https://github.com/richardsladetdj-creator/TangoDisplay/releases/tag/v3.16.0</sparkle:releaseNotesLink>
+            <enclosure
+                url="https://github.com/richardsladetdj-creator/TangoDisplay/releases/download/v3.16.0/TangoDisplay-v3.16.0-universal.zip"
+                sparkle:edSignature="oNkzkArbBU3AlvtSAHVk1our+HYdzKfxq39gRtkxaHSwxCbgPG+8y1Cvm5IREqQ26tvjrqGjiCMn+ZNpAEYgAw=="
+                length="4747797"
+                type="application/zip"/>
+        </item>
+        <item>
             <title>Version 3.15.4</title>
             <pubDate>Fri, 16 May 2026 00:00:00 +0000</pubDate>
             <sparkle:version>49</sparkle:version>
