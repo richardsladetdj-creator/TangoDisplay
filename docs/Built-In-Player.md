@@ -370,6 +370,64 @@ Loudness analysis results are cached on disk so each file is only analysed once.
 
 ---
 
+## Audio Unit Plugin (Beta)
+
+The built-in player can host an Apple Audio Unit effect plugin directly in the audio chain — useful for applying EQ curves, dynamics processing, or filtering to improve the clarity of older recordings without modifying the source files.
+
+> **Beta feature:** Test your plugin at home before using it live. If the plugin fails to load, playback continues unaffected.
+
+### Enabling the Plugin
+
+1. Go to **Settings › Player**
+2. In the **Audio Unit Plugin** section, enable the **Enable Audio Unit Plugin** toggle
+3. Click **Choose…** to open the plugin picker
+4. Select a plugin — it loads immediately into the audio chain
+
+### Supported Plugins
+
+The plugin picker shows only plugins suited to audio restoration work:
+
+| Plugin | Purpose |
+|---|---|
+| AUNBandEQ | N-band parametric EQ |
+| AUGraphicEQ | Graphic EQ |
+| AUDynamicsProcessor | Dynamics processing |
+| AUMultibandCompressor | Multi-band compression |
+| AUPeakLimiter | Peak limiting |
+| AUHighShelfFilter | High shelf filter |
+| AULowShelfFilter | Low shelf filter |
+| AUHipass | High-pass filter |
+| AULowpass | Low-pass filter |
+
+### Controls
+
+| Control | What it does |
+|---|---|
+| **Enable Audio Unit Plugin** | Inserts or removes the plugin from the audio chain |
+| **Choose…** | Opens the plugin picker to select a different plugin |
+| **Bypass** | Temporarily bypasses the plugin without unloading it |
+| **Open Plugin Window** | Opens the plugin's native editor UI |
+| **Remove** | Removes the selected plugin entirely |
+
+### Audio Chain
+
+The plugin occupies a single slot in the audio chain — only one plugin can be active at a time:
+
+```
+┌─────────────┐    ┌──────────────┐    ┌───────────────────────────┐    ┌───────────┐
+│  Audio File │───▶│  ReplayGain  │───▶│  AU Plugin  ← single slot │───▶│  Output   │
+│  (decoder)  │    │  (optional)  │    │  (optional, bypassable)   │    │  Device   │
+└─────────────┘    └──────────────┘    └───────────────────────────┘    └───────────┘
+```
+
+To swap plugins, click **Choose…** again — the previous plugin is unloaded and replaced.
+
+### Setlist Toolbar Quick Access
+
+When a plugin is selected, a **puzzle piece button** appears in the Setlist toolbar next to the ReplayGain button. Click it to open the plugin window directly without navigating to Settings. The button is disabled when the plugin is turned off or bypassed.
+
+---
+
 ## Audio Output
 
 By default the built-in player uses the macOS system default output device. To route audio to a specific device (e.g. a dedicated DJ audio interface):

@@ -194,6 +194,25 @@ final class AppSettings: ObservableObject {
         }
     }
 
+    // MARK: - Audio Unit plugin
+
+    @Published var audioUnitPluginEnabled: Bool {
+        didSet { UserDefaults.standard.set(audioUnitPluginEnabled, forKey: kPrefix + "audioUnitPluginEnabled") }
+    }
+    @Published var audioUnitPluginBypassed: Bool {
+        didSet { UserDefaults.standard.set(audioUnitPluginBypassed, forKey: kPrefix + "audioUnitPluginBypassed") }
+    }
+    @Published var selectedAudioUnitPlugin: AudioUnitPluginSelection? {
+        didSet {
+            if let sel = selectedAudioUnitPlugin,
+               let data = try? JSONEncoder().encode(sel) {
+                UserDefaults.standard.set(data, forKey: kPrefix + "selectedAudioUnitPlugin")
+            } else {
+                UserDefaults.standard.removeObject(forKey: kPrefix + "selectedAudioUnitPlugin")
+            }
+        }
+    }
+
     // MARK: - Init
 
     init() {
@@ -274,6 +293,14 @@ final class AppSettings: ObservableObject {
             trackTransforms = rules
         } else {
             trackTransforms = [:]
+        }
+        audioUnitPluginEnabled = ud.object(forKey: kPrefix + "audioUnitPluginEnabled").flatMap { $0 as? Bool } ?? false
+        audioUnitPluginBypassed = ud.object(forKey: kPrefix + "audioUnitPluginBypassed").flatMap { $0 as? Bool } ?? false
+        if let data = ud.data(forKey: kPrefix + "selectedAudioUnitPlugin"),
+           let sel = try? JSONDecoder().decode(AudioUnitPluginSelection.self, from: data) {
+            selectedAudioUnitPlugin = sel
+        } else {
+            selectedAudioUnitPlugin = nil
         }
     }
 

@@ -910,6 +910,132 @@ func runAutoReplayGainTests() {
     }
 }
 
+// MARK: - AudioUnitPlugin tests
+
+func runAudioUnitPluginTests() {
+    suite("AudioUnitPluginSelection — model") {
+        test("encodes and decodes round-trip") {
+            let sel = AudioUnitPluginSelection(
+                id: UUID(),
+                name: "Test EQ",
+                manufacturerName: "Acme Audio",
+                componentType: 1635083896,
+                componentSubType: 1162298982,
+                componentManufacturer: 1634758764
+            )
+            let data = try JSONEncoder().encode(sel)
+            let decoded = try JSONDecoder().decode(AudioUnitPluginSelection.self, from: data)
+            try expectEqual(decoded.name, sel.name)
+            try expectEqual(decoded.manufacturerName, sel.manufacturerName)
+            try expectEqual(decoded.componentType, sel.componentType)
+            try expectEqual(decoded.componentSubType, sel.componentSubType)
+            try expectEqual(decoded.componentManufacturer, sel.componentManufacturer)
+            try expectEqual(decoded.id, sel.id)
+        }
+
+        test("reconstructs component values from stored data") {
+            let type: UInt32 = 1635083896
+            let sub: UInt32  = 9999
+            let mfr: UInt32  = 1634758764
+            let sel = AudioUnitPluginSelection(
+                name: "FX", manufacturerName: "Co",
+                componentType: type, componentSubType: sub, componentManufacturer: mfr
+            )
+            let data = try JSONEncoder().encode(sel)
+            let out = try JSONDecoder().decode(AudioUnitPluginSelection.self, from: data)
+            try expectEqual(out.componentType, type)
+            try expectEqual(out.componentSubType, sub)
+            try expectEqual(out.componentManufacturer, mfr)
+        }
+
+        test("invalid JSON decodes safely to nil") {
+            let bad = "not json".data(using: .utf8)!
+            let result = try? JSONDecoder().decode(AudioUnitPluginSelection.self, from: bad)
+            try expectNil(result)
+        }
+
+        test("Equatable — identical values are equal") {
+            let id = UUID()
+            let a = AudioUnitPluginSelection(id: id, name: "X", manufacturerName: "Y",
+                                             componentType: 1, componentSubType: 2, componentManufacturer: 3)
+            let b = AudioUnitPluginSelection(id: id, name: "X", manufacturerName: "Y",
+                                             componentType: 1, componentSubType: 2, componentManufacturer: 3)
+            try expect(a == b)
+        }
+
+        test("Equatable — different id is not equal") {
+            let a = AudioUnitPluginSelection(name: "X", manufacturerName: "Y",
+                                             componentType: 1, componentSubType: 2, componentManufacturer: 3)
+            let b = AudioUnitPluginSelection(name: "X", manufacturerName: "Y",
+                                             componentType: 1, componentSubType: 2, componentManufacturer: 3)
+            try expect(a != b)
+        }
+    }
+
+    suite("AudioUnitPluginStatus — display text") {
+        test("disabled") {
+            try expectEqual(AudioUnitPluginStatus.disabled.displayText, "Plugin: Disabled")
+        }
+        test("noPluginSelected") {
+            try expectEqual(AudioUnitPluginStatus.noPluginSelected.displayText, "Plugin: No plugin selected")
+        }
+        test("loading") {
+            try expectEqual(AudioUnitPluginStatus.loading("Focusrite Red 2 EQ").displayText,
+                            "Plugin: Loading Focusrite Red 2 EQ…")
+        }
+        test("active") {
+            try expectEqual(AudioUnitPluginStatus.active("MJUC").displayText, "Plugin: Active — MJUC")
+        }
+        test("bypassed") {
+            try expectEqual(AudioUnitPluginStatus.bypassed("MJUC").displayText, "Plugin: Bypassed — MJUC")
+        }
+        test("unavailable") {
+            try expectEqual(AudioUnitPluginStatus.unavailable("Focusrite Red 2 EQ").displayText,
+                            "Plugin: Not available — Focusrite Red 2 EQ")
+        }
+        test("failed") {
+            try expectEqual(AudioUnitPluginStatus.failed("REAMP", reason: "timeout").displayText,
+                            "Plugin: Failed to load — REAMP")
+        }
+    }
+
+    suite("AudioUnitPluginStatus — predicates") {
+        test("isActive true only for active") {
+            try expect(AudioUnitPluginStatus.active("X").isActive)
+            try expect(!AudioUnitPluginStatus.disabled.isActive)
+            try expect(!AudioUnitPluginStatus.loading("X").isActive)
+            try expect(!AudioUnitPluginStatus.bypassed("X").isActive)
+            try expect(!AudioUnitPluginStatus.failed("X", reason: "r").isActive)
+        }
+        test("isInert true for disabled and noPluginSelected") {
+            try expect(AudioUnitPluginStatus.disabled.isInert)
+            try expect(AudioUnitPluginStatus.noPluginSelected.isInert)
+            try expect(!AudioUnitPluginStatus.active("X").isInert)
+            try expect(!AudioUnitPluginStatus.loading("X").isInert)
+            try expect(!AudioUnitPluginStatus.bypassed("X").isInert)
+            try expect(!AudioUnitPluginStatus.unavailable("X").isInert)
+            try expect(!AudioUnitPluginStatus.failed("X", reason: "r").isInert)
+        }
+        test("shortDisplayText empty for inert statuses") {
+            try expectEqual(AudioUnitPluginStatus.disabled.shortDisplayText, "")
+            try expectEqual(AudioUnitPluginStatus.noPluginSelected.shortDisplayText, "")
+        }
+        test("shortDisplayText non-empty for active statuses") {
+            try expect(!AudioUnitPluginStatus.active("MJUC").shortDisplayText.isEmpty)
+            try expect(!AudioUnitPluginStatus.bypassed("MJUC").shortDisplayText.isEmpty)
+            try expect(!AudioUnitPluginStatus.loading("MJUC").shortDisplayText.isEmpty)
+        }
+        test("Equatable — same cases are equal") {
+            try expect(AudioUnitPluginStatus.active("X") == AudioUnitPluginStatus.active("X"))
+            try expect(AudioUnitPluginStatus.disabled == AudioUnitPluginStatus.disabled)
+        }
+        test("Equatable — different cases are not equal") {
+            try expect(AudioUnitPluginStatus.active("X") != AudioUnitPluginStatus.bypassed("X"))
+            try expect(AudioUnitPluginStatus.failed("X", reason: "a") != AudioUnitPluginStatus.failed("X", reason: "b"))
+        }
+    }
+}
+
 // MARK: - Main entry point
 
 runCortinaDetectorTests()
@@ -918,6 +1044,7 @@ runProfileStoreTests()
 runDisplayStateTests()
 runReplayGainTests()
 runAutoReplayGainTests()
+runAudioUnitPluginTests()
 
 print("\n════════════════════════════════")
 let icon = totalFailed == 0 ? "✓" : "✗"

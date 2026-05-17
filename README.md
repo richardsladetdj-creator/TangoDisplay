@@ -49,7 +49,7 @@ A native macOS menu-bar app that shows a clean, fullscreen dancer display on an 
 ### Option A — Download pre-built app (easiest)
 
 1. Go to the [Releases](https://github.com/richardsladetdj-creator/TangoDisplay/releases) page
-2. Download `TangoDisplay-v3.15.4-universal.zip` (works on both Apple Silicon and Intel Macs)
+2. Download `TangoDisplay-v3.16.0-universal.zip` (works on both Apple Silicon and Intel Macs)
 3. Unzip and drag `TangoDisplay.app` to your `/Applications` folder
 4. **Right-click › Open** on first launch (required because the app is ad-hoc signed, not notarised)
 5. Grant the permissions macOS requests (see [Permissions](#permissions) below)
@@ -135,6 +135,12 @@ Key design decisions:
 ---
 
 ## Changelog
+
+### v3.16.0
+- Audio Unit Plugin support (Beta) — load any of the supported Apple AU effect plugins (EQ, dynamics, filters) directly into the audio chain
+- Plugin picker filtered to restoration-relevant plugins only (AUNBandEQ, AUGraphicEQ, AUDynamicsProcessor, AUMultibandCompressor, AUPeakLimiter, AUHighShelfFilter, AULowShelfFilter, AUHipass, AULowpass)
+- Quick-access plugin button in the Setlist toolbar — appears when a plugin is selected, opens the plugin window in one click
+- Fixed: switching plugins no longer shows the previous plugin's editor window
 
 ### v3.15.4
 - Add automatic update notifications via Sparkle — TangoDisplay now prompts you when a new version is available and can install it in one click

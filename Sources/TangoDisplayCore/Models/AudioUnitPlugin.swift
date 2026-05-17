@@ -1,0 +1,71 @@
+import Foundation
+
+public struct AudioUnitPluginSelection: Codable, Equatable, Identifiable {
+    public let id: UUID
+    public let name: String
+    public let manufacturerName: String
+    public let componentType: UInt32
+    public let componentSubType: UInt32
+    public let componentManufacturer: UInt32
+
+    public init(
+        id: UUID = UUID(),
+        name: String,
+        manufacturerName: String,
+        componentType: UInt32,
+        componentSubType: UInt32,
+        componentManufacturer: UInt32
+    ) {
+        self.id = id
+        self.name = name
+        self.manufacturerName = manufacturerName
+        self.componentType = componentType
+        self.componentSubType = componentSubType
+        self.componentManufacturer = componentManufacturer
+    }
+}
+
+public enum AudioUnitPluginStatus: Equatable {
+    case disabled
+    case noPluginSelected
+    case loading(String)
+    case active(String)
+    case bypassed(String)
+    case unavailable(String)
+    case failed(String, reason: String)
+
+    public var displayText: String {
+        switch self {
+        case .disabled:               return "Plugin: Disabled"
+        case .noPluginSelected:       return "Plugin: No plugin selected"
+        case .loading(let name):      return "Plugin: Loading \(name)…"
+        case .active(let name):       return "Plugin: Active — \(name)"
+        case .bypassed(let name):     return "Plugin: Bypassed — \(name)"
+        case .unavailable(let name):  return "Plugin: Not available — \(name)"
+        case .failed(let name, _):    return "Plugin: Failed to load — \(name)"
+        }
+    }
+
+    public var shortDisplayText: String {
+        switch self {
+        case .disabled, .noPluginSelected: return ""
+        case .loading(let name):      return "AU: Loading \(name)…"
+        case .active(let name):       return "AU: \(name)"
+        case .bypassed:               return "AU: Bypassed"
+        case .unavailable(let name):  return "AU: Not available — \(name)"
+        case .failed:                 return "AU: Failed to load"
+        }
+    }
+
+    public var isActive: Bool {
+        if case .active = self { return true }
+        return false
+    }
+
+    public var isInert: Bool {
+        switch self {
+        case .disabled, .noPluginSelected: return true
+        default: return false
+        }
+    }
+}

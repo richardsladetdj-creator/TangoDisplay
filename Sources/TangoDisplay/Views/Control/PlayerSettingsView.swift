@@ -84,7 +84,7 @@ struct PlayerSettingsView: View {
                 .onAppear { if jriverZones.isEmpty { loadJRiverZones() } }
             }
 
-            if settings.selectedPlayer == .builtIn {
+            if settings.selectedPlayer == .builtIn, let localPlayer = appState.localPlayer {
                 Section {
                     LabeledContent("Main output:") {
                         Picker("", selection: $settings.builtInOutputDeviceUID) {
@@ -223,6 +223,8 @@ struct PlayerSettingsView: View {
                     Text("ReplayGain")
                         .foregroundColor(ControlTheme.accent)
                 }
+
+                AudioUnitPluginSettingsSection(player: localPlayer)
 
                 Section {
                     Toggle("Title", isOn: .constant(true)).disabled(true)

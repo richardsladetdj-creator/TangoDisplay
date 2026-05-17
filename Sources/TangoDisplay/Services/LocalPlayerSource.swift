@@ -1,6 +1,7 @@
 import AVFoundation
 import AppKit
 import Combine
+import CoreAudioKit
 import Foundation
 import OSLog
 import TangoDisplayCore
@@ -62,6 +63,15 @@ final class LocalPlayerSource: NSObject, ObservableObject, MusicPlayerSource {
     private var earlyMarkedEntryIDs: Set<UUID> = []
     private var scheduleGeneration: Int = 0
 
+    // MARK: - Private — Audio Unit plugin
+
+    private let pluginManager = AudioUnitPluginManager()
+    private var activeAudioUnitPlugin: AVAudioUnit?
+    private var pluginLoadTask: Task<Void, Never>?
+    private var pluginLoadGeneration: Int = 0
+    @Published private(set) var audioUnitPluginStatus: AudioUnitPluginStatus = .noPluginSelected
+    private var pluginWindow: NSWindow?
+
     // MARK: - Private — auto-gap
 
     private var currentPaddingFrames: AVAudioFrameCount = 0
@@ -97,10 +107,7 @@ final class LocalPlayerSource: NSObject, ObservableObject, MusicPlayerSource {
         audioEngine.attach(eq)
         audioEngine.attach(replayGainMixer)
         audioEngine.attach(balanceMixer)
-        audioEngine.connect(playerNode,      to: eq,              format: nil)
-        audioEngine.connect(eq,              to: replayGainMixer, format: nil)
-        audioEngine.connect(replayGainMixer, to: balanceMixer,    format: nil)
-        audioEngine.connect(balanceMixer,    to: audioEngine.mainMixerNode, format: nil)
+        connectAudioGraph(format: nil)
 
         let frequencies: [Float]          = [60, 250, 1000, 4000, 12000]
         let filterTypes: [AVAudioUnitEQFilterType] = [.lowShelf, .parametric, .parametric, .parametric, .highShelf]
@@ -125,15 +132,8 @@ final class LocalPlayerSource: NSObject, ObservableObject, MusicPlayerSource {
     @objc private func handleEngineConfigChange() {
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
-            if let file = self.audioFile {
-                self.audioEngine.disconnectNodeOutput(self.playerNode)
-                self.audioEngine.disconnectNodeOutput(self.eq)
-                self.audioEngine.disconnectNodeOutput(self.replayGainMixer)
-                self.audioEngine.disconnectNodeOutput(self.balanceMixer)
-                self.audioEngine.connect(self.playerNode,      to: self.eq,              format: file.processingFormat)
-                self.audioEngine.connect(self.eq,              to: self.replayGainMixer, format: file.processingFormat)
-                self.audioEngine.connect(self.replayGainMixer, to: self.balanceMixer,    format: file.processingFormat)
-                self.audioEngine.connect(self.balanceMixer,    to: self.audioEngine.mainMixerNode, format: file.processingFormat)
+            if self.audioFile != nil {
+                self.connectAudioGraph(format: self.audioFile?.processingFormat)
             }
             // Engine is already stopped by the system when this notification fires, so it is
             // safe to set the output device property before restarting — this re-asserts the
@@ -349,9 +349,14 @@ final class LocalPlayerSource: NSObject, ObservableObject, MusicPlayerSource {
         setupObservers()
         reportCurrentState()
         reportPlaylist()
+        initializePluginStatus()
     }
 
     func stop() {
+        pluginLoadTask?.cancel()
+        pluginLoadTask = nil
+        pluginWindow?.close()
+        pluginWindow = nil
         currentEntryID = nil
         isCurrentEntryMarkedAsPlayed = false
         isActivePlaying = false
@@ -572,14 +577,7 @@ final class LocalPlayerSource: NSObject, ObservableObject, MusicPlayerSource {
             // Stop the engine before reconnecting so the graph is in a clean state; a mono
             // AIFF scheduled against the stereo-defaulted startup connection produces silence.
             audioEngine.stop()
-            audioEngine.disconnectNodeOutput(playerNode)
-            audioEngine.disconnectNodeOutput(eq)
-            audioEngine.disconnectNodeOutput(replayGainMixer)
-            audioEngine.disconnectNodeOutput(balanceMixer)
-            audioEngine.connect(playerNode,      to: eq,              format: file.processingFormat)
-            audioEngine.connect(eq,              to: replayGainMixer, format: file.processingFormat)
-            audioEngine.connect(replayGainMixer, to: balanceMixer,    format: file.processingFormat)
-            audioEngine.connect(balanceMixer,    to: audioEngine.mainMixerNode, format: file.processingFormat)
+            connectAudioGraph(format: file.processingFormat)
             try audioEngine.start()
             levelMeter.reinstallTap()
             applyReplayGain(for: entry)
@@ -695,6 +693,214 @@ final class LocalPlayerSource: NSObject, ObservableObject, MusicPlayerSource {
     private func currentEntryIsPlayed() -> Bool {
         guard let id = currentEntryID else { return false }
         return setlist.entries.first(where: { $0.id == id })?.state == .played
+    }
+
+    // MARK: - Private: audio graph
+
+    private func connectAudioGraph(format: AVAudioFormat?) {
+        audioEngine.disconnectNodeOutput(playerNode)
+        audioEngine.disconnectNodeOutput(eq)
+        audioEngine.disconnectNodeOutput(replayGainMixer)
+        if let plugin = activeAudioUnitPlugin {
+            audioEngine.disconnectNodeOutput(plugin)
+        }
+        audioEngine.disconnectNodeOutput(balanceMixer)
+
+        audioEngine.connect(playerNode, to: eq, format: format)
+        audioEngine.connect(eq, to: replayGainMixer, format: format)
+
+        let usePlugin = settings.audioUnitPluginEnabled
+            && !settings.audioUnitPluginBypassed
+            && activeAudioUnitPlugin != nil
+        if usePlugin, let plugin = activeAudioUnitPlugin {
+            audioEngine.connect(replayGainMixer, to: plugin, format: format)
+            audioEngine.connect(plugin, to: balanceMixer, format: format)
+        } else {
+            audioEngine.connect(replayGainMixer, to: balanceMixer, format: format)
+        }
+
+        audioEngine.connect(balanceMixer, to: audioEngine.mainMixerNode, format: format)
+    }
+
+    private func rewireGraphSafely() {
+        let wasPlaying = isActivePlaying
+        let savedElapsed = elapsed
+        let format = audioFile?.processingFormat
+
+        playerNode.stop()
+        audioEngine.stop()
+        connectAudioGraph(format: format)
+
+        do {
+            try audioEngine.start()
+        } catch {
+            // Plugin caused engine start failure (e.g. format incompatibility). Fall back to safe graph.
+            os_log(.error, "TangoDisplay: engine start failed with plugin, falling back: %{public}@",
+                   error.localizedDescription)
+            let name = settings.selectedAudioUnitPlugin?.name ?? ""
+            let failedPlugin = activeAudioUnitPlugin
+            activeAudioUnitPlugin = nil
+            audioUnitPluginStatus = .failed(name, reason: error.localizedDescription)
+            connectAudioGraph(format: format)
+            try? audioEngine.start()
+            if let plugin = failedPlugin {
+                audioEngine.detach(plugin)
+            }
+        }
+
+        levelMeter.reinstallTap()
+        applyBalance(_balance)
+        if audioFile != nil {
+            seekTo(savedElapsed)
+            if wasPlaying { playerNode.play() }
+        }
+    }
+
+    // MARK: - Audio Unit plugin actions
+
+    func selectAudioUnitPlugin(_ selection: AudioUnitPluginSelection) {
+        pluginLoadTask?.cancel()
+        pluginLoadTask = nil
+        closePluginWindow()
+        detachActivePlugin()
+        settings.selectedAudioUnitPlugin = selection
+        if settings.audioUnitPluginEnabled {
+            startPluginLoad(selection)
+        } else {
+            audioUnitPluginStatus = .disabled
+        }
+    }
+
+    func enableAudioUnitPlugin() {
+        settings.audioUnitPluginEnabled = true
+        guard let selection = settings.selectedAudioUnitPlugin else {
+            audioUnitPluginStatus = .noPluginSelected
+            return
+        }
+        if activeAudioUnitPlugin != nil {
+            audioUnitPluginStatus = settings.audioUnitPluginBypassed
+                ? .bypassed(selection.name) : .active(selection.name)
+            rewireGraphSafely()
+        } else {
+            startPluginLoad(selection)
+        }
+    }
+
+    func disableAudioUnitPlugin() {
+        settings.audioUnitPluginEnabled = false
+        audioUnitPluginStatus = .disabled
+        rewireGraphSafely()
+    }
+
+    func bypassAudioUnitPlugin(_ bypassed: Bool) {
+        settings.audioUnitPluginBypassed = bypassed
+        if let name = settings.selectedAudioUnitPlugin?.name {
+            audioUnitPluginStatus = bypassed ? .bypassed(name) : .active(name)
+        }
+        rewireGraphSafely()
+    }
+
+    func removeAudioUnitPlugin() {
+        pluginLoadTask?.cancel()
+        pluginLoadTask = nil
+        closePluginWindow()
+        detachActivePlugin()
+        settings.selectedAudioUnitPlugin = nil
+        settings.audioUnitPluginEnabled = false
+        settings.audioUnitPluginBypassed = false
+        audioUnitPluginStatus = .noPluginSelected
+        rewireGraphSafely()
+    }
+
+    func openPluginWindow() {
+        guard let avUnit = activeAudioUnitPlugin else { return }
+        if let existing = pluginWindow {
+            existing.makeKeyAndOrderFront(nil)
+            return
+        }
+        avUnit.auAudioUnit.requestViewController { [weak self] viewController in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                guard let vc = viewController else {
+                    self.audioUnitPluginStatus = .failed(
+                        self.settings.selectedAudioUnitPlugin?.name ?? "",
+                        reason: "Plugin editor unavailable")
+                    return
+                }
+                let window = NSWindow(contentViewController: vc)
+                window.title = self.settings.selectedAudioUnitPlugin?.name ?? "Plugin"
+                window.styleMask = [.titled, .closable, .resizable]
+                window.isReleasedWhenClosed = false
+                window.makeKeyAndOrderFront(nil)
+                self.pluginWindow = window
+            }
+        }
+    }
+
+    func closePluginWindow() {
+        pluginWindow?.close()
+        pluginWindow = nil
+    }
+
+    // MARK: - Private: plugin internals
+
+    private func initializePluginStatus() {
+        guard let selection = settings.selectedAudioUnitPlugin else {
+            audioUnitPluginStatus = .noPluginSelected
+            return
+        }
+        guard settings.audioUnitPluginEnabled else {
+            audioUnitPluginStatus = .disabled
+            return
+        }
+        // Plugin already live from a previous session cycle — no need to reload.
+        if activeAudioUnitPlugin != nil {
+            audioUnitPluginStatus = settings.audioUnitPluginBypassed
+                ? .bypassed(selection.name) : .active(selection.name)
+            return
+        }
+        if pluginManager.isAvailable(selection) {
+            startPluginLoad(selection)
+        } else {
+            audioUnitPluginStatus = .unavailable(selection.name)
+        }
+    }
+
+    private func startPluginLoad(_ selection: AudioUnitPluginSelection) {
+        pluginLoadTask?.cancel()
+        pluginLoadGeneration += 1
+        let gen = pluginLoadGeneration
+        audioUnitPluginStatus = .loading(selection.name)
+        pluginLoadTask = Task { [weak self] in
+            guard let self else { return }
+            do {
+                let avUnit = try await pluginManager.instantiate(selection)
+                await MainActor.run { [weak self] in
+                    guard let self, self.pluginLoadGeneration == gen else {
+                        // Load became stale (user changed selection or removed plugin while loading).
+                        return
+                    }
+                    self.audioEngine.attach(avUnit)
+                    self.activeAudioUnitPlugin = avUnit
+                    self.audioUnitPluginStatus = .active(selection.name)
+                    self.rewireGraphSafely()
+                }
+            } catch {
+                await MainActor.run { [weak self] in
+                    guard let self, self.pluginLoadGeneration == gen else { return }
+                    self.audioUnitPluginStatus = .failed(selection.name, reason: error.localizedDescription)
+                    // Graph already on safe path (no plugin was attached).
+                }
+            }
+        }
+    }
+
+    private func detachActivePlugin() {
+        guard let plugin = activeAudioUnitPlugin else { return }
+        // Disconnect before detach so the engine does not hold a reference to the node.
+        audioEngine.disconnectNodeOutput(plugin)
+        audioEngine.detach(plugin)
+        activeAudioUnitPlugin = nil
     }
 
     // MARK: - Private: observers

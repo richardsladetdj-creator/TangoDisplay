@@ -87,6 +87,13 @@ struct PlayerControlsView: View {
                     .lineLimit(1)
                     .frame(maxWidth: .infinity, alignment: .center)
             }
+            if !player.audioUnitPluginStatus.isInert {
+                Text(player.audioUnitPluginStatus.shortDisplayText)
+                    .font(.system(size: 10))
+                    .foregroundColor(.secondary.opacity(0.7))
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity, alignment: .center)
+            }
         }
     }
 

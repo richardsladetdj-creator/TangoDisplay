@@ -259,6 +259,12 @@ struct SetlistView: View {
                         ReplayGainPopoverView(player: player)
                             .environmentObject(settings)
                     }
+                    if settings.selectedAudioUnitPlugin != nil {
+                        Button { player.openPluginWindow() } label: {
+                            Label("Plugin", systemImage: "puzzlepiece.fill")
+                        }
+                        .disabled(!settings.audioUnitPluginEnabled || settings.audioUnitPluginBypassed)
+                    }
                 }
             }
             ToolbarItem(placement: .automatic) {
