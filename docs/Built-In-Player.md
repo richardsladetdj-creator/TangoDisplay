@@ -165,7 +165,8 @@ A status bar at the bottom of the track list shows:
 
 > **Screenshot placeholder:** setlist footer showing total duration and estimated end time
 
-- **Total duration** — the combined length of all remaining unplayed tracks
+- **Total duration & remaining count** — the combined length of all tracks followed by the number of unplayed tracks (e.g. "1h 42m · 28 remaining")
+- **Next cortina** — a live countdown showing how much time remains before the next cortina begins, based on the current elapsed position and queued track durations. Shows "0s" when a cortina is already playing.
 - **Estimated end time** — a projected clock time when the setlist will finish, calculated from the current elapsed position, all remaining queued tracks, and any stop-after marker (e.g. "Ends ~23:45")
 - **Auto-gap status** — when auto-gap is enabled, a small green dot and the live gap duration (e.g. "Auto-gap: 2.0s") appear. The dot turns grey and the label reads "Auto-gap: off" when the feature is disabled. The duration updates in real time as you adjust the slider.
 - **Auto-fade status** — when auto-fade is enabled, a small orange dot and "Auto-fade: on" label appear alongside the auto-gap indicator. The dot turns grey and the label reads "Auto-fade: off" when the feature is disabled.

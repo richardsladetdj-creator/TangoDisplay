@@ -473,15 +473,6 @@ private struct StatusBarView: View {
 
     var body: some View {
         HStack {
-            HStack(spacing: 4) {
-                Image(systemName: "clock")
-                Text(formatDuration(setlist.totalPlaylistDuration))
-            }
-            .font(.system(size: 11))
-            .foregroundColor(.secondary)
-
-            Spacer()
-
             HStack(spacing: 12) {
                 HStack(spacing: 4) {
                     Circle()
@@ -506,16 +497,69 @@ private struct StatusBarView: View {
 
             Spacer()
 
-            HStack(spacing: 4) {
-                Text("Ends at:")
-                Text(formattedEndTime)
+            HStack(spacing: 12) {
+                HStack(spacing: 4) {
+                    Image(systemName: "clock")
+                    Text(formatDuration(setlist.totalPlaylistDuration))
+                    Text("·")
+                    Text("\(unplayedCount) remaining")
+                }
+                .font(.system(size: 11))
+                .foregroundColor(.secondary)
+
+                HStack(spacing: 4) {
+                    Text("Next cortina:")
+                    Text(setlistFormatDuration(timeUntilNextCortina))
+                        .monospacedDigit()
+                }
+                .font(.system(size: 11))
+                .foregroundColor(.secondary)
+
+                HStack(spacing: 4) {
+                    Text("Ends at:")
+                    Text(formattedEndTime)
+                }
+                .font(.system(size: 11))
+                .foregroundColor(.secondary)
             }
-            .font(.system(size: 11))
-            .foregroundColor(.secondary)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 5)
         .background(Color(nsColor: .controlBackgroundColor))
+    }
+
+    private var unplayedCount: Int {
+        setlist.entries.filter { $0.state != .played }.count
+    }
+
+    private var timeUntilNextCortina: TimeInterval {
+        let detector = settings.makeDetector()
+        let entries = setlist.entries
+
+        let startIdx: Int
+        var remaining: TimeInterval
+
+        if let id = player.currentEntryID,
+           let idx = entries.firstIndex(where: { $0.id == id }) {
+            let entry = entries[idx]
+            if detector.isCortina(genre: entry.track.genre) { return 0 }
+            startIdx = idx
+            remaining = max(0, (entry.duration ?? 0) - player.elapsed)
+        } else if let idx = entries.firstIndex(where: { $0.state != .played }) {
+            let entry = entries[idx]
+            if detector.isCortina(genre: entry.track.genre) { return 0 }
+            startIdx = idx
+            remaining = entry.duration ?? 0
+        } else {
+            return 0
+        }
+
+        for entry in entries[(startIdx + 1)...] {
+            guard entry.state != .played else { continue }
+            if detector.isCortina(genre: entry.track.genre) { return remaining }
+            remaining += entry.duration ?? 0
+        }
+        return 0
     }
 
     private var setEndTime: Date? {
@@ -529,7 +573,9 @@ private struct StatusBarView: View {
             case .paused, .queued:
                 remaining += entry.duration ?? 0
             case .played:
-                break
+                if entry.id == player.currentEntryID {
+                    remaining += max(0, (entry.duration ?? 0) - player.elapsed)
+                }
             }
             if let stopID = stopAfterID, entry.id == stopID { break }
         }
