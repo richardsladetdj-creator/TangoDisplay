@@ -4,6 +4,22 @@
         <title>TangoDisplay</title>
         <link>https://github.com/richardsladetdj-creator/TangoDisplay</link>
         <item>
+            <title>Version 3.16.4</title>
+            <pubDate>Sun, 18 May 2026 12:00:00 +0000</pubDate>
+            <sparkle:version>54</sparkle:version>
+            <sparkle:shortVersionString>3.16.4</sparkle:shortVersionString>
+            <description><![CDATA[
+                <ul>
+                    <li>Playback progress bar moves into the currently-playing track row — elapsed time, remaining time, mark-as-played threshold, and auto-fade marker now appear directly on the row</li>
+                </ul>
+            ]]></description>
+            <enclosure
+                url="https://github.com/richardsladetdj-creator/TangoDisplay/releases/download/v3.16.4/TangoDisplay-v3.16.4-universal.zip"
+                sparkle:edSignature="7fdJuQQVYaDkSQC80kc3yFoqEjI+fqD4W4kiZ58mUaRixhBIR2QcUv8zTvlQr/kICXgKwzbSvoGRY6xYK/EpCw=="
+                length="4807181"
+                type="application/zip"/>
+        </item>
+        <item>
             <title>Version 3.16.3</title>
             <pubDate>Sun, 18 May 2026 12:00:00 +0000</pubDate>
             <sparkle:version>53</sparkle:version>
