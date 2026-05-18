@@ -4,6 +4,23 @@
         <title>TangoDisplay</title>
         <link>https://github.com/richardsladetdj-creator/TangoDisplay</link>
         <item>
+            <title>Version 3.16.5</title>
+            <pubDate>Sun, 18 May 2026 12:00:00 +0000</pubDate>
+            <sparkle:version>55</sparkle:version>
+            <sparkle:shortVersionString>3.16.5</sparkle:shortVersionString>
+            <description><![CDATA[
+                <ul>
+                    <li>Add tracks by pressing ⌘V — copy audio files in Finder, Music.app, or Swinsian with ⌘C, then press ⌘V while the Setlist panel is focused to append them instantly</li>
+                    <li>Genre colour now optionally extends to the song title — enable "Include song title" in Settings › Player › Genre Colours</li>
+                </ul>
+            ]]></description>
+            <enclosure
+                url="https://github.com/richardsladetdj-creator/TangoDisplay/releases/download/v3.16.5/TangoDisplay-v3.16.5-universal.zip"
+                sparkle:edSignature="06QbVWJzHwC+dxhr54p/eSlUOmvcZe4kP0NYQKxl1uxl6hcua6nxrKYNxGdrZucHRi/dP0k/1jMdar2uGDjNAg=="
+                length="4817656"
+                type="application/zip"/>
+        </item>
+        <item>
             <title>Version 3.16.4</title>
             <pubDate>Sun, 18 May 2026 12:00:00 +0000</pubDate>
             <sparkle:version>54</sparkle:version>
