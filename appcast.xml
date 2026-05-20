@@ -4,6 +4,23 @@
         <title>TangoDisplay</title>
         <link>https://github.com/richardsladetdj-creator/TangoDisplay</link>
         <item>
+            <title>Version 3.18.2</title>
+            <pubDate>Wed, 21 May 2026 12:00:00 +0000</pubDate>
+            <sparkle:version>61</sparkle:version>
+            <sparkle:shortVersionString>3.18.2</sparkle:shortVersionString>
+            <description><![CDATA[
+                <ul>
+                    <li>Setlist player: unplayed tracks now appear in semibold with full-brightness text when genre colours are disabled, making them visually distinct from played tracks.</li>
+                    <li>Setlist player: Cortina tracks always display bold/bright regardless of genre colour rules, so tanda breaks are easy to spot.</li>
+                </ul>
+            ]]></description>
+            <enclosure
+                url="https://github.com/richardsladetdj-creator/TangoDisplay/releases/download/v3.18.2/TangoDisplay-v3.18.2-universal.zip"
+                sparkle:edSignature="7vXstICrQ1AAEpFewBeQRCzqZuFX6rK1HDMajHKLpp3unI9Sr0chILoWmNB/M1KmsoePZcIHexbbwVtDbgksDw=="
+                length="5145806"
+                type="application/zip"/>
+        </item>
+        <item>
             <title>Version 3.18.1</title>
             <pubDate>Wed, 21 May 2026 12:00:00 +0000</pubDate>
             <sparkle:version>60</sparkle:version>
