@@ -4,6 +4,23 @@
         <title>TangoDisplay</title>
         <link>https://github.com/richardsladetdj-creator/TangoDisplay</link>
         <item>
+            <title>Version 3.17.0</title>
+            <pubDate>Tue, 20 May 2026 12:00:00 +0000</pubDate>
+            <sparkle:version>58</sparkle:version>
+            <sparkle:shortVersionString>3.17.0</sparkle:shortVersionString>
+            <description><![CDATA[
+                <ul>
+                    <li>Setlist Reports — Export any setlist as a self-contained HTML report with genre breakdown charts, top-track ranking, per-tanda summaries, and an interactive searchable track table. Save reports from the Share menu in the Setlist tab; open, combine, and export from the new Reports tab in the sidebar.</li>
+                    <li>Genre fallback for Music.app library — Tracks whose genre is stored only in Music.app's iTunes Library.xml (not embedded in the audio file) are now correctly picked up by all genre-dependent features (cortina detection, genre colours, setlist stats).</li>
+                </ul>
+            ]]></description>
+            <enclosure
+                url="https://github.com/richardsladetdj-creator/TangoDisplay/releases/download/v3.17.0/TangoDisplay-v3.17.0-universal.zip"
+                sparkle:edSignature="Y2YdWNmjGUeXqlN7FSsJvijv+g9Fr/PJ+3bFVTCEOOfmdW94h5hHOjQlPRseXMfNnRrXStr5Q490j2+Sw9DLAQ=="
+                length="5099434"
+                type="application/zip"/>
+        </item>
+        <item>
             <title>Version 3.16.7</title>
             <pubDate>Mon, 19 May 2026 12:00:00 +0000</pubDate>
             <sparkle:version>57</sparkle:version>
