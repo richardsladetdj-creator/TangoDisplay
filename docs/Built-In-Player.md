@@ -310,6 +310,10 @@ Opens a Save dialog and writes a standard M3U8 playlist file. Each track is writ
 
 Use this to import your milonga setlist into any M3U-compatible player or DJ software.
 
+### Save Setlist Report…
+
+Saves a snapshot of the current setlist as a named report. The report captures every track's title, artist, genre, year, duration, play state, and last-tanda flag. Reports are stored in Application Support and are visible in the **Reports** tab, where they can be exported as interactive HTML files.
+
 ---
 
 ## 5-Band Equaliser
@@ -557,3 +561,28 @@ To remove a custom colour, click the **trash** icon next to the rule. The genre 
 ### Track Info Transformations
 
 The **Advanced** tab in Settings lets you apply optional regex-based rules to reformat how Artist, Title, Year, Album Artist, and Comments are displayed on the dancer screen — without modifying the original music tags. See [Advanced Settings](Advanced-Settings) for full details and examples.
+
+---
+
+## Reports Tab
+
+The Reports tab (sidebar › **Reports**) stores setlist snapshots you've saved during or after a milonga.
+
+### Saving a report
+
+In the Setlist tab, open the **Share** menu (↑ icon in the toolbar) and choose **Save Setlist Report…**. Enter a name for the report — it defaults to a timestamp — then click **Save**. The snapshot captures every track's title, artist, genre, year, duration, play state, and last-tanda flag at the moment of saving.
+
+### Exporting an HTML report
+
+Select one or more reports in the list, then click **Generate HTML Report**. TangoDisplay creates a self-contained HTML file you can open in any browser or share with others. The report includes:
+
+- **Summary cards** — total tracks, played count, total duration, year range, unique artists and genres
+- **Per-setlist summary table** (when multiple reports are combined)
+- **Top 10 most-played tracks** across all selected setlists
+- **Genre breakdown charts** — artists by genre, year range by genre, and time played by genre (rendered with Chart.js)
+- **Full track listing** — sortable columns and accent-insensitive search
+
+### Managing reports
+
+- **Select multiple** — ⌘-click or use the checkboxes to select several reports before generating a combined export.
+- **Delete** — select one or more reports and click **Delete**. A confirmation prompt appears before anything is removed.

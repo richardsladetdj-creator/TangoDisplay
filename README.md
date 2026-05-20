@@ -49,7 +49,7 @@ A native macOS menu-bar app that shows a clean, fullscreen dancer display on an 
 ### Option A — Download pre-built app (easiest)
 
 1. Go to the [Releases](https://github.com/richardsladetdj-creator/TangoDisplay/releases) page
-2. Download `TangoDisplay-v3.16.7-universal.zip` (works on both Apple Silicon and Intel Macs)
+2. Download `TangoDisplay-v3.17.0-universal.zip` (works on both Apple Silicon and Intel Macs)
 3. Unzip and drag `TangoDisplay.app` to your `/Applications` folder
 4. **Right-click › Open** on first launch (required because the app is ad-hoc signed, not notarised)
 5. Grant the permissions macOS requests (see [Permissions](#permissions) below)
@@ -135,6 +135,10 @@ Key design decisions:
 ---
 
 ## Changelog
+
+### v3.17.0
+- **Setlist Reports** — Export any setlist as a self-contained HTML report with genre breakdown charts, top-track ranking, per-tanda summaries, and an interactive searchable track table. Save reports from the Share menu in the Setlist tab; open, combine, and export from the new Reports tab in the sidebar.
+- **Genre fallback for Music.app library** — Tracks whose genre is stored only in Music.app's iTunes Library.xml (not embedded in the audio file) are now correctly picked up by all genre-dependent features (cortina detection, genre colours, setlist stats).
 
 ### v3.16.7
 - Built-in player renamed "Setlist (Built-In Player)" — appears first in the player list and is now the default for fresh installs, with a "Recommended" badge in Settings › Player

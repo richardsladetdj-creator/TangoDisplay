@@ -5,6 +5,7 @@ import SwiftUI
 enum SidebarItem: String, Hashable, CaseIterable {
     case live
     case setlist
+    case reports
     case cortinaRules
     case appearance
     case display
@@ -16,6 +17,7 @@ enum SidebarItem: String, Hashable, CaseIterable {
         switch self {
         case .live:          return "Live"
         case .setlist:       return "Setlist"
+        case .reports:       return "Reports"
         case .cortinaRules:  return "Cortina Rules"
         case .appearance:    return "Appearance"
         case .display:       return "Display"
@@ -29,6 +31,7 @@ enum SidebarItem: String, Hashable, CaseIterable {
         switch self {
         case .live:          return "play.circle.fill"
         case .setlist:       return "list.number"
+        case .reports:       return "chart.bar.doc.horizontal"
         case .cortinaRules:  return "music.note"
         case .appearance:    return "paintbrush"
         case .display:       return "display"
@@ -40,9 +43,9 @@ enum SidebarItem: String, Hashable, CaseIterable {
 
     var section: String {
         switch self {
-        case .live, .setlist:                                          return "Live"
+        case .live, .setlist, .reports:                                 return "Live"
         case .cortinaRules, .appearance, .display, .player, .advanced: return "Settings"
-        case .profiles:                                                return "Profiles"
+        case .profiles:                                                 return "Profiles"
         }
     }
 }
@@ -52,6 +55,7 @@ enum SidebarItem: String, Hashable, CaseIterable {
 struct ControlView: View {
     @EnvironmentObject var appState: AppState
     @Environment(\.openWindow) private var openWindow
+    @StateObject private var reportStore = SetlistReportStore()
     @State private var selectedItem: SidebarItem? = .live
     @State private var pendingSelection: SidebarItem? = nil
     @State private var showingUnsavedChangesAlert = false
@@ -63,6 +67,7 @@ struct ControlView: View {
         } detail: {
             detail
         }
+        .environmentObject(reportStore)
         .frame(minWidth: 820, minHeight: 660)
         .preferredColorScheme(.dark)
         .alert("Unsaved Changes", isPresented: $showingUnsavedChangesAlert) {
@@ -131,6 +136,7 @@ struct ControlView: View {
             Section("Live") {
                 sidebarRow(.live)
                 sidebarRow(.setlist)
+                sidebarRow(.reports)
             }
             Section("Global Settings") {
                 sidebarRow(.cortinaRules)
@@ -167,6 +173,8 @@ struct ControlView: View {
             liveView
         case .setlist:
             setlistView
+        case .reports:
+            SetlistReportingView()
         case .cortinaRules:
             CortinaSettingsView()
                 .environmentObject(appState)

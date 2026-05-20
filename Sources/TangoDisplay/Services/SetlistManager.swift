@@ -333,8 +333,9 @@ final class SetlistManager: ObservableObject {
         let title = await string(for: .commonIdentifierTitle)
             ?? url.deletingPathExtension().lastPathComponent
         let artist = await string(for: .commonIdentifierArtist) ?? ""
-        // Genre: search across all common tagging conventions; empty values are treated as absent
-        // so a stale empty tag in one keyspace doesn't block lookup in the next.
+        // Genre: search across all common tagging conventions; falls back to iTunes Library.xml
+        // for tracks whose genre lives only in Music.app's library and was never embedded in the file.
+        // Empty values are treated as absent so a stale empty tag doesn't block the next lookup.
         // (await cannot appear inside ?? autoclosures, so each lookup is a separate binding.)
         let genreID3        = resolveID3Genre(await string(for: .id3MetadataContentType)) // MP3: TCON frame (resolved)
         let genreiTunes     = await string(for: .iTunesMetadataUserGenre)                  // M4A: ©gen text atom
@@ -342,7 +343,9 @@ final class SetlistManager: ObservableObject {
         let genreVorbis     = await string(forRawKey: "genre")                             // FLAC/Vorbis comment
         let genreRawTcon    = resolveID3Genre(await string(forRawKey: "tcon"))             // raw ID3 key fallback (resolved)
         let genre = genreID3 ?? genreiTunes ?? genrePredefined ?? genreVorbis
-            ?? genreRawTcon ?? SetlistManager.genreFromAudioToolbox(url) ?? ""             // AIFF ID3 chunk (AVFoundation misses these)
+            ?? genreRawTcon ?? SetlistManager.genreFromAudioToolbox(url)                   // AIFF ID3 chunk (AVFoundation misses these)
+            ?? SetlistManager.iTunesLibraryGenres[SetlistManager.iTunesMediaRelativeKey(url.path)] // Music.app library XML (genre not embedded in file)
+            ?? ""
 
         let yearFromTYER    = (await string(for: .id3MetadataYear)).flatMap { Int($0) }
         let yearFromiTunes  = (await string(for: .iTunesMetadataReleaseDate)).flatMap { Int(String($0.prefix(4))) }
@@ -400,6 +403,53 @@ final class SetlistManager: ObservableObject {
             albumArtist: albumArtist,
             replayGainInfo: replayGainInfo
         )
+    }
+
+    // Lazy one-time parse of iTunes Library.xml → file path (lowercased) → genre.
+    // Provides a fallback for tracks whose genre lives only in Music.app's library
+    // and was never embedded in the file's ID3/AAC tags.
+    // Returns [:] silently if the XML is absent, unreadable, or malformed — no errors thrown.
+    private static let iTunesLibraryGenres: [String: String] = loadITunesLibraryGenres()
+
+    private static func loadITunesLibraryGenres() -> [String: String] {
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        let candidates = [
+            home.appendingPathComponent("Music/Music/iTunes/iTunes Library.xml"),
+            home.appendingPathComponent("Music/iTunes/iTunes Library.xml"),
+            home.appendingPathComponent("Music/Music/iTunes/iTunes Music Library.xml"),
+        ]
+        for xmlURL in candidates {
+            guard let data = try? Data(contentsOf: xmlURL),
+                  let plist = try? PropertyListSerialization.propertyList(from: data, format: nil),
+                  let root = plist as? [String: Any],
+                  let tracks = root["Tracks"] as? [String: Any]
+            else { continue }
+
+            var result: [String: String] = [:]
+            for (_, trackAny) in tracks {
+                guard let track = trackAny as? [String: Any],
+                      let location = track["Location"] as? String,
+                      let genre = track["Genre"] as? String,
+                      !genre.isEmpty,
+                      let fileURL = URL(string: location)
+                else { continue }
+                // Key by the path relative to "iTunes Media/" so this works even when
+                // the library was migrated from a different user account (different home prefix).
+                result[iTunesMediaRelativeKey(fileURL.path)] = genre
+            }
+            return result
+        }
+        return [:]
+    }
+
+    // Returns the substring after the last occurrence of "/iTunes Media/" (lowercased, NFD-normalised),
+    // or the full lowercased path if that marker is absent.
+    private static func iTunesMediaRelativeKey(_ path: String) -> String {
+        let normalised = path.decomposedStringWithCanonicalMapping.lowercased()
+        if let range = normalised.range(of: "/itunes media/", options: .backwards) {
+            return String(normalised[range.upperBound...])
+        }
+        return normalised
     }
 
     private static func genreFromAudioToolbox(_ url: URL) -> String? {

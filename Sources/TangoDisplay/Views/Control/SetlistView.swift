@@ -24,6 +24,7 @@ struct SetlistView: View {
     let player: LocalPlayerSource
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var settings: AppSettings
+    @EnvironmentObject var reportStore: SetlistReportStore
     @State private var isDragTargeted = false
     @State private var activeEntryID: UUID? = nil
     @State private var isPlayerActive: Bool = false
@@ -34,6 +35,10 @@ struct SetlistView: View {
     @State private var exportPlaylistName = ""
     @State private var showExportError = false
     @State private var exportErrorMessage = ""
+    @State private var showSaveReportDialog = false
+    @State private var saveReportName = ""
+    @State private var showSaveReportError = false
+    @State private var saveReportErrorMessage = ""
     @State private var showEQPopover = false
     @State private var showBalancePopover = false
     @State private var showAutoGapPopover = false
@@ -86,6 +91,22 @@ struct SetlistView: View {
         }
         .onReceive(player.$currentEntryID) { activeEntryID = $0 }
         .onReceive(player.$isActivePlaying) { isPlayerActive = $0 }
+        .alert("Save Setlist Report", isPresented: $showSaveReportDialog) {
+            TextField("Setlist name", text: $saveReportName)
+            Button("Save") {
+                let trimmed = saveReportName.trimmingCharacters(in: .whitespaces)
+                let name = trimmed.isEmpty ? Self.defaultExportName() : trimmed
+                saveSetlistReport(name: name)
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Enter a name for this setlist export. It will appear in the Reports tab.")
+        }
+        .alert("Save Failed", isPresented: $showSaveReportError) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(saveReportErrorMessage)
+        }
     }
 
     // MARK: - Empty state
@@ -244,6 +265,11 @@ struct SetlistView: View {
                     }
                     Button("Export to M3U8…") {
                         exportM3U8()
+                    }
+                    Divider()
+                    Button("Save Setlist Report…") {
+                        saveReportName = Self.defaultExportName()
+                        showSaveReportDialog = true
                     }
                 } label: {
                     Label("Share", systemImage: "square.and.arrow.up")
@@ -436,6 +462,28 @@ struct SetlistView: View {
             lines.append(entry.fileURL.path)
         }
         try? lines.joined(separator: "\n").write(to: url, atomically: true, encoding: .utf8)
+    }
+
+    private func saveSetlistReport(name: String) {
+        let entries = setlist.entries.map { e in
+            SetlistReportEntry(
+                title: e.track.title,
+                artist: e.track.artist,
+                genre: settings.displayLabel(for: e.track.genre),
+                year: e.track.year,
+                albumArtist: e.track.albumArtist,
+                duration: e.duration,
+                isPlayed: e.state == .played,
+                isLastTanda: e.isLastTanda
+            )
+        }
+        let report = SetlistReport(id: UUID(), name: name, exportDate: Date(), entries: entries)
+        do {
+            try reportStore.save(report)
+        } catch {
+            saveReportErrorMessage = error.localizedDescription
+            showSaveReportError = true
+        }
     }
 
     private static func defaultExportName() -> String {
