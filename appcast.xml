@@ -4,6 +4,24 @@
         <title>TangoDisplay</title>
         <link>https://github.com/richardsladetdj-creator/TangoDisplay</link>
         <item>
+            <title>Version 3.18.0</title>
+            <pubDate>Tue, 20 May 2026 18:00:00 +0000</pubDate>
+            <sparkle:version>59</sparkle:version>
+            <sparkle:shortVersionString>3.18.0</sparkle:shortVersionString>
+            <description><![CDATA[
+                <ul>
+                    <li>MegaSeg integration (Beta) — TangoDisplay can now monitor MegaSeg Pro as a player source. Select MegaSeg in Settings › Player to enable. Genre is looked up from MegaSeg's own library database, with Music.app's iTunes Library as a fallback.</li>
+                    <li>MegaSeg workflow notes: The display updates only when a track starts on MegaSeg's program (main) output. Pre-listening in the cue deck (headphones) never affects the display. Playlist look-ahead is only available when playing from a loaded MegaSeg queue. Tanda counting requires a loaded playlist. Requires MegaSeg v5.9.4 or later.</li>
+                    <li>Please test and report results — this integration is marked Beta because real-world DJ workflows with MegaSeg vary widely. If you use MegaSeg, please try it and report any issues.</li>
+                </ul>
+            ]]></description>
+            <enclosure
+                url="https://github.com/richardsladetdj-creator/TangoDisplay/releases/download/v3.18.0/TangoDisplay-v3.18.0-universal.zip"
+                sparkle:edSignature="XRJyY2gVD1ei12LdOdCFNcikSCN/EWS0fM28OXSc9aVNgwwTW0q0Sz2lp5cxy3/UaEu5L3XL99muJ21YHa7qCw=="
+                length="5146297"
+                type="application/zip"/>
+        </item>
+        <item>
             <title>Version 3.17.0</title>
             <pubDate>Tue, 20 May 2026 12:00:00 +0000</pubDate>
             <sparkle:version>58</sparkle:version>
