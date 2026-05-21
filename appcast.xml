@@ -4,6 +4,26 @@
         <title>TangoDisplay</title>
         <link>https://github.com/richardsladetdj-creator/TangoDisplay</link>
         <item>
+            <title>Version 3.18.3</title>
+            <pubDate>Thu, 22 May 2026 12:00:00 +0000</pubDate>
+            <sparkle:version>62</sparkle:version>
+            <sparkle:shortVersionString>3.18.3</sparkle:shortVersionString>
+            <description><![CDATA[
+                <ul>
+                    <li>Override Text (⌘⇧O) now has its own font and colour settings in Appearance</li>
+                    <li>When paused, pressing play again bypasses auto-gap and plays immediately</li>
+                    <li>Auto-gap calculation simplified: gap applied only when existing silence falls short</li>
+                    <li>Artwork tab: new artist entry auto-focuses the name field; remove button uses trash icon</li>
+                    <li>Setlist report: Played card shows played/total count; currently-playing track shown as played in setlist view</li>
+                </ul>
+            ]]></description>
+            <enclosure
+                url="https://github.com/richardsladetdj-creator/TangoDisplay/releases/download/v3.18.3/TangoDisplay-v3.18.3-universal.zip"
+                sparkle:edSignature="1NzEp6vOVBh5Q4mCSfl64/c8l3IWIfIk9DX+cqRDY1LFm7XOwy+1jstdnayekX2TzsPIw8PjUv+gEommeiI7CA=="
+                length="5172099"
+                type="application/zip"/>
+        </item>
+        <item>
             <title>Version 3.18.2</title>
             <pubDate>Wed, 21 May 2026 12:00:00 +0000</pubDate>
             <sparkle:version>61</sparkle:version>
