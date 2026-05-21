@@ -4,6 +4,26 @@
         <title>TangoDisplay</title>
         <link>https://github.com/richardsladetdj-creator/TangoDisplay</link>
         <item>
+            <title>Version 3.19.0</title>
+            <pubDate>Wed, 21 May 2026 12:00:00 +0000</pubDate>
+            <sparkle:version>64</sparkle:version>
+            <sparkle:shortVersionString>3.19.0</sparkle:shortVersionString>
+            <description><![CDATA[
+                <ul>
+                    <li>New: Grouping metadata field — read from Music.app, Swinsian, Embrace, J River, and audio file tags; optionally shown in setlist rows and selectable as the singer source on the dancer display</li>
+                    <li>New: Exclusive Mode (Hog Mode) for built-in player — claim exclusive access to the selected audio interface, with conflict detection and a Retry button</li>
+                    <li>Fix: Duplicate cortinas in setlist now tracked correctly by UUID</li>
+                    <li>Fix: Remaining set time and estimated end time account for auto-fade cortina effective play duration</li>
+                    <li>Fix: "Stop After Playing" can now target the currently playing track</li>
+                </ul>
+            ]]></description>
+            <enclosure
+                url="https://github.com/richardsladetdj-creator/TangoDisplay/releases/download/v3.19.0/TangoDisplay-v3.19.0-universal.zip"
+                sparkle:edSignature="VwWSPFLUjHCGQZGtMLOxA1iSPZRmrpiHKok2iZcToyYH6ucnKSiXqKqIm24OJrrZu/AcBkkpLojPH4rihRikDw=="
+                length="5241186"
+                type="application/zip"/>
+        </item>
+        <item>
             <title>Version 3.18.4</title>
             <pubDate>Wed, 21 May 2026 12:00:00 +0000</pubDate>
             <sparkle:version>63</sparkle:version>
