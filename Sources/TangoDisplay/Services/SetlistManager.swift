@@ -291,6 +291,20 @@ final class SetlistManager: ObservableObject {
             return val
         }
 
+        // Old iTunes (v4.x era) M4A files store itsk keys as packed NSNumber 4-char codes rather
+        // than NSString, so filteredByIdentifier misses them. Match by packed int32 value instead.
+        // Uses unicodeScalars (not utf8) so that multi-byte UTF-8 chars like © (U+00A9 = 0xA9)
+        // are treated as a single byte — matching the 4-char atom code convention.
+        func string(forITunesAtom atomCode: String) async -> String? {
+            let scalars = Array(atomCode.unicodeScalars)
+            guard scalars.count == 4 else { return nil }
+            let bytes = scalars.map { UInt8($0.value & 0xFF) }
+            let packed = Int32(bitPattern: (UInt32(bytes[0]) << 24) | (UInt32(bytes[1]) << 16) | (UInt32(bytes[2]) << 8) | UInt32(bytes[3]))
+            guard let item = metadata.first(where: { ($0.key as? NSNumber)?.int32Value == packed && $0.keySpace == .iTunes }) else { return nil }
+            guard let val = try? await item.load(.stringValue), !val.isEmpty else { return nil }
+            return val
+        }
+
         // Skips Apple machine-generated COMM frames (iTunNORM, iTunSMPB, iTunPGAP, etc.) that
         // store binary data as hex strings — AVFoundation returns all COMM frames and .first may
         // land on one of these instead of the human-readable comment.
@@ -359,9 +373,17 @@ final class SetlistManager: ObservableObject {
         let commentFromID3    = await humanReadableComment()
         let commentFromiTunes = await string(for: .iTunesMetadataUserComment)
         let comment = commentFromID3 ?? commentFromiTunes
-        let albumArtistFromID3    = await string(for: .id3MetadataBand)
-        let albumArtistFromiTunes = await string(for: .iTunesMetadataAlbumArtist)
-        let albumArtist = albumArtistFromID3 ?? albumArtistFromiTunes
+        let albumArtistFromID3       = await string(for: .id3MetadataBand)
+        let albumArtistFromiTunes    = await string(for: .iTunesMetadataAlbumArtist)
+        let albumArtistOldiTunes     = await string(forITunesAtom: "aART") // old M4A: NSNumber key
+        let albumArtist = albumArtistFromID3 ?? albumArtistFromiTunes ?? albumArtistOldiTunes
+        let groupingFromID3       = await string(for: .id3MetadataContentGroupDescription) // MP3: TIT1
+        let groupingFromiTunes    = await string(for: .iTunesMetadataGrouping)             // modern M4A
+        let groupingOldiTunes     = await string(forITunesAtom: "©grp")                   // old M4A: NSNumber key
+        let groupingVorbis        = await string(forRawKey: "grouping")                    // FLAC/Vorbis
+        let groupingRawTit1       = await string(forRawKey: "tit1")                        // raw ID3 fallback
+        let grouping = groupingFromID3 ?? groupingFromiTunes ?? groupingOldiTunes ?? groupingVorbis ?? groupingRawTit1
+            ?? SetlistManager.iTunesLibrary[SetlistManager.iTunesMediaRelativeKey(url.path)]?.grouping
 
         // ID3 TXXX frame lookup (MP3 ReplayGain). The description/tag-name lives in extraAttributes[.info].
         func txxx(key: String) async -> String? {
@@ -405,6 +427,7 @@ final class SetlistManager: ObservableObject {
             year: year,
             comment: comment,
             albumArtist: albumArtist,
+            grouping: grouping,
             replayGainInfo: replayGainInfo
         )
     }
@@ -413,6 +436,7 @@ final class SetlistManager: ObservableObject {
         let genre: String?
         let year: Int?
         let artist: String?
+        let grouping: String?
     }
 
     // Lazy one-time parse of iTunes Library.xml → relative path key → track metadata.
@@ -483,11 +507,12 @@ final class SetlistManager: ObservableObject {
                 else { continue }
                 // Key by the path relative to "iTunes Media/" so this works even when
                 // the library was migrated from a different user account (different home prefix).
-                let genre  = (track["Genre"]  as? String).flatMap { $0.isEmpty ? nil : $0 }
-                let year   = track["Year"] as? Int
-                let artist = (track["Artist"] as? String).flatMap { $0.isEmpty ? nil : $0 }
-                guard genre != nil || year != nil || artist != nil else { continue }
-                result[iTunesMediaRelativeKey(fileURL.path)] = iTunesLibraryEntry(genre: genre, year: year, artist: artist)
+                let genre    = (track["Genre"]    as? String).flatMap { $0.isEmpty ? nil : $0 }
+                let year     = track["Year"] as? Int
+                let artist   = (track["Artist"]   as? String).flatMap { $0.isEmpty ? nil : $0 }
+                let grouping = (track["Grouping"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+                guard genre != nil || year != nil || artist != nil || grouping != nil else { continue }
+                result[iTunesMediaRelativeKey(fileURL.path)] = iTunesLibraryEntry(genre: genre, year: year, artist: artist, grouping: grouping)
             }
             return result
         }

@@ -21,7 +21,7 @@ final class AppleScriptBridge {
 
     private let queue = DispatchQueue(label: "com.tangodisplay.applescript", qos: .utility)
 
-    /// Returns list: [name, artist, genre, persistentID, year, playerStateString, comment, albumArtist]
+    /// Returns list: [name, artist, genre, persistentID, year, playerStateString, comment, albumArtist, grouping]
     private static let trackScriptSource = """
         tell application "Music"
             try
@@ -37,7 +37,12 @@ final class AppleScriptBridge {
                         set theAlbumArtist to album artist of t
                         if theAlbumArtist is missing value then set theAlbumArtist to ""
                     end try
-                    return {name of t, artist of t, genre of t, persistent ID of t, year of t, "playing", theComment, theAlbumArtist}
+                    set theGrouping to ""
+                    try
+                        set theGrouping to grouping of t
+                        if theGrouping is missing value then set theGrouping to ""
+                    end try
+                    return {name of t, artist of t, genre of t, persistent ID of t, year of t, "playing", theComment, theAlbumArtist, theGrouping}
                 else if player state is paused then
                     set t to current track
                     set theComment to ""
@@ -50,12 +55,17 @@ final class AppleScriptBridge {
                         set theAlbumArtist to album artist of t
                         if theAlbumArtist is missing value then set theAlbumArtist to ""
                     end try
-                    return {name of t, artist of t, genre of t, persistent ID of t, year of t, "paused", theComment, theAlbumArtist}
+                    set theGrouping to ""
+                    try
+                        set theGrouping to grouping of t
+                        if theGrouping is missing value then set theGrouping to ""
+                    end try
+                    return {name of t, artist of t, genre of t, persistent ID of t, year of t, "paused", theComment, theAlbumArtist, theGrouping}
                 else
-                    return {"", "", "", "", 0, "stopped", "", ""}
+                    return {"", "", "", "", 0, "stopped", "", "", ""}
                 end if
             on error
-                return {"", "", "", "", 0, "stopped", "", ""}
+                return {"", "", "", "", 0, "stopped", "", "", ""}
             end try
         end tell
         """
@@ -80,7 +90,12 @@ final class AppleScriptBridge {
                     if theComment is missing value then set theComment to ""
                     set theAlbumArtist to album artist of t
                     if theAlbumArtist is missing value then set theAlbumArtist to ""
-                    set trackList to trackList & {{name of t, artist of t, genre of t, persistent ID of t, year of t, theComment, theAlbumArtist}}
+                    set theGrouping to ""
+                    try
+                        set theGrouping to grouping of t
+                        if theGrouping is missing value then set theGrouping to ""
+                    end try
+                    set trackList to trackList & {{name of t, artist of t, genre of t, persistent ID of t, year of t, theComment, theAlbumArtist, theGrouping}}
                     if persistent ID of t is currentTrackID then
                         set foundIndex to i
                     end if
@@ -234,12 +249,14 @@ final class AppleScriptBridge {
         let comment        = commentRaw.isEmpty ? nil : commentRaw
         let albumArtistRaw = d.atIndex(8)?.stringValue ?? ""
         let albumArtist    = albumArtistRaw.isEmpty ? nil : albumArtistRaw
+        let groupingRaw    = d.atIndex(9)?.stringValue ?? ""
+        let grouping       = groupingRaw.isEmpty ? nil : groupingRaw
 
         if pid.isEmpty && title.isEmpty {
             return (nil, .stopped)
         }
 
-        return (Track(title: title, artist: artist, genre: genre, persistentID: pid, year: year, comment: comment, albumArtist: albumArtist), state)
+        return (Track(title: title, artist: artist, genre: genre, persistentID: pid, year: year, comment: comment, albumArtist: albumArtist, grouping: grouping), state)
     }
 
     /// Parses: {currentIndex (int), [[name, artist, genre, pid, year, comment], ...]}
@@ -266,7 +283,9 @@ final class AppleScriptBridge {
             let comment        = commentRaw.isEmpty ? nil : commentRaw
             let albumArtistRaw = item.atIndex(7)?.stringValue ?? ""
             let albumArtist    = albumArtistRaw.isEmpty ? nil : albumArtistRaw
-            tracks.append(Track(title: title, artist: artist, genre: genre, persistentID: pid, year: year, comment: comment, albumArtist: albumArtist))
+            let groupingRaw    = item.atIndex(8)?.stringValue ?? ""
+            let grouping       = groupingRaw.isEmpty ? nil : groupingRaw
+            tracks.append(Track(title: title, artist: artist, genre: genre, persistentID: pid, year: year, comment: comment, albumArtist: albumArtist, grouping: grouping))
         }
 
         // Bounds-check: 1-based AppleScript index must fit the array

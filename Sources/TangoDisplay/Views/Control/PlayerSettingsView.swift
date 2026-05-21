@@ -111,14 +111,49 @@ struct PlayerSettingsView: View {
             if settings.selectedPlayer == .builtIn, let localPlayer = appState.localPlayer {
                 Section {
                     LabeledContent("Main output:") {
-                        Picker("", selection: $settings.builtInOutputDeviceUID) {
-                            Text("System Default").tag("")
-                            ForEach(appState.availableAudioOutputDevices) { device in
-                                Text(device.name).tag(device.id)
+                        HStack(spacing: 6) {
+                            Picker("", selection: $settings.builtInOutputDeviceUID) {
+                                Text("System Default").tag("")
+                                ForEach(appState.availableAudioOutputDevices) { device in
+                                    Text(device.name).tag(device.id)
+                                }
+                            }
+                            .pickerStyle(.menu)
+                            .fixedSize()
+                            .disabled(localPlayer.isChangingDevice)
+                            if localPlayer.isChangingDevice {
+                                ProgressView()
+                                    .scaleEffect(0.7)
+                                    .frame(width: 16, height: 16)
                             }
                         }
-                        .pickerStyle(.menu)
-                        .fixedSize()
+                    }
+                    Toggle("Exclusive mode (Hog Mode)", isOn: $settings.builtInHogMode)
+                        .disabled(settings.builtInOutputDeviceUID.isEmpty || localPlayer.isChangingDevice)
+                    if settings.builtInOutputDeviceUID.isEmpty {
+                        Text("Select a specific output device to enable exclusive mode.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    } else {
+                        Text("Prevents other apps from using this audio interface while Setlist is running.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    if localPlayer.hogModeConflict {
+                        HStack {
+                            Label(
+                                "Another app has exclusive access to this device. Release its hog mode first.",
+                                systemImage: "exclamationmark.triangle.fill"
+                            )
+                            .font(.caption)
+                            .foregroundColor(.orange)
+                            Spacer()
+                            Button("Retry") {
+                                localPlayer.retryOutputDevice()
+                            }
+                            .font(.caption)
+                            .buttonStyle(.borderless)
+                        }
                     }
                 } header: {
                     Text("Built-in Player")
@@ -258,6 +293,7 @@ struct PlayerSettingsView: View {
                     Toggle("Time", isOn: $settings.showTime)
                     Toggle("Comments", isOn: $settings.showComments)
                     Toggle("Album Artist", isOn: $settings.showAlbumArtist)
+                    Toggle("Grouping", isOn: $settings.showGrouping)
                     Text("Controls which fields are shown in the setlist rows.")
                         .font(.caption)
                         .foregroundColor(.secondary)

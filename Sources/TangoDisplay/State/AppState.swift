@@ -352,7 +352,13 @@ final class AppState: ObservableObject {
         // Anchor playlistCurrentIndex to the cortina's real position.
         // playlistCurrentIndex may be stale if the user skipped tracks or
         // double-clicked a cortina — the playlist context only refreshes every 20s.
-        if let tracks = playlistTracks,
+        // For the local player, use the UUID-based entry lookup so that duplicate
+        // cortina files (same persistentID) resolve to the correct occurrence.
+        if let player = localPlayer,
+           let id = player.currentEntryID,
+           let idx = setlist.entries.firstIndex(where: { $0.id == id }) {
+            playlistCurrentIndex = idx
+        } else if let tracks = playlistTracks,
            let idx = tracks.firstIndex(where: { $0.persistentID == track.persistentID }) {
             playlistCurrentIndex = idx
         }
@@ -464,12 +470,16 @@ final class AppState: ObservableObject {
 
         // Re-evaluate cortina look-ahead with fresh data. If the cortina is no longer
         // in the new playlist (user switched playlists), clear the stale next-track display.
+        // playlistCurrentIndex was already set to context.currentIndex above (correct for
+        // all sources, including duplicate-cortina setlists on the local player), so use it
+        // directly rather than re-deriving via firstIndex — which would always return the
+        // first occurrence and produce the wrong look-ahead for duplicate cortina files.
         if displayState.mode == .cortina, let currentTrack = displayState.currentTrack {
             let detector = settings.makeDetector()
             if let tracks = playlistTracks,
-               let idx = tracks.firstIndex(where: { $0.persistentID == currentTrack.persistentID }) {
-                playlistCurrentIndex = idx
-                var nextFromPlaylist = findNextDanceTrack(after: idx, detector: detector)
+               playlistCurrentIndex < tracks.count,
+               tracks[playlistCurrentIndex].persistentID == currentTrack.persistentID {
+                var nextFromPlaylist = findNextDanceTrack(after: playlistCurrentIndex, detector: detector)
                 if let np = nextFromPlaylist, let known = lastKnownNextTrack,
                    np.persistentID == known.persistentID {
                     nextFromPlaylist = known

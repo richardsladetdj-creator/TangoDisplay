@@ -40,7 +40,7 @@ final class SwinsianMonitor: @unchecked Sendable {
         end tell
         """
 
-    // Returns two lines: comment (line 1), album artist (line 2) for the current track.
+    // Returns three lines: comment (line 1), album artist (line 2), grouping (line 3) for the current track.
     private static let trackDetailsScript = """
         tell application "Swinsian"
             try
@@ -53,16 +53,21 @@ final class SwinsianMonitor: @unchecked Sendable {
                         set aa to album artist of t
                         if aa is missing value then set aa to ""
                     end try
-                    return c & linefeed & aa
+                    set grp to ""
+                    try
+                        set grp to grouping of t
+                        if grp is missing value then set grp to ""
+                    end try
+                    return c & linefeed & aa & linefeed & grp
                 end if
             end try
-            return linefeed
+            return linefeed & linefeed
         end tell
         """
 
     // Returns field-separated data for the second track in the playback queue (the
     // track that will play after the current one), or empty string if the queue has
-    // fewer than two tracks. Fields: name, artist, genre, id, year, comment, albumArtist.
+    // fewer than two tracks. Fields: name, artist, genre, id, year, comment, albumArtist, grouping.
     private static let nextQueueTrackScript = """
         tell application "Swinsian"
             try
@@ -78,7 +83,12 @@ final class SwinsianMonitor: @unchecked Sendable {
                         set aa to album artist of t
                         if aa is missing value then set aa to ""
                     end try
-                    return (name of t) & fsep & (artist of t) & fsep & (genre of t) & fsep & (id of t) & fsep & (yr as text) & fsep & c & fsep & aa
+                    set grp to ""
+                    try
+                        set grp to grouping of t
+                        if grp is missing value then set grp to ""
+                    end try
+                    return (name of t) & fsep & (artist of t) & fsep & (genre of t) & fsep & (id of t) & fsep & (yr as text) & fsep & c & fsep & aa & fsep & grp
                 end tell
             end try
             return ""
@@ -147,7 +157,7 @@ final class SwinsianMonitor: @unchecked Sendable {
             return
         }
         onTrackUpdate?(track, .playing)
-        if track.comment == nil || track.albumArtist == nil {
+        if track.comment == nil || track.albumArtist == nil || track.grouping == nil {
             fetchDetailsAndUpdate(baseTrack: track, state: .playing)
         }
         fetchAndNotifyNextTrack()
@@ -159,7 +169,7 @@ final class SwinsianMonitor: @unchecked Sendable {
             return
         }
         onTrackUpdate?(track, .paused)
-        if track.comment == nil || track.albumArtist == nil {
+        if track.comment == nil || track.albumArtist == nil || track.grouping == nil {
             fetchDetailsAndUpdate(baseTrack: track, state: .paused)
         }
     }
@@ -177,9 +187,11 @@ final class SwinsianMonitor: @unchecked Sendable {
                       ?? Int(info["year"] as? String ?? "")
                       ?? 0
         let year       = yearRaw > 0 ? yearRaw : nil
-        let commentRaw = info["comment"] as? String ?? ""
-        let comment    = commentRaw.isEmpty ? nil : commentRaw
-        return Track(title: title, artist: artist, genre: genre, persistentID: uuid, year: year, comment: comment)
+        let commentRaw  = info["comment"]  as? String ?? ""
+        let comment     = commentRaw.isEmpty  ? nil : commentRaw
+        let groupingRaw = info["grouping"] as? String ?? ""
+        let grouping    = groupingRaw.isEmpty ? nil : groupingRaw
+        return Track(title: title, artist: artist, genre: genre, persistentID: uuid, year: year, comment: comment, grouping: grouping)
     }
 
     private func fetchDetailsAndUpdate(baseTrack: Track, state: PlayerState) {
@@ -189,12 +201,14 @@ final class SwinsianMonitor: @unchecked Sendable {
             let lines = raw.components(separatedBy: "\n")
             let comment     = lines.count > 0 ? lines[0].trimmingCharacters(in: .whitespacesAndNewlines) : ""
             let albumArtist = lines.count > 1 ? lines[1].trimmingCharacters(in: .whitespacesAndNewlines) : ""
+            let grouping    = lines.count > 2 ? lines[2].trimmingCharacters(in: .whitespacesAndNewlines) : ""
             let updated = Track(
                 title: baseTrack.title, artist: baseTrack.artist,
                 genre: baseTrack.genre, persistentID: baseTrack.persistentID,
                 year: baseTrack.year,
                 comment:     comment.isEmpty     ? baseTrack.comment     : comment,
-                albumArtist: albumArtist.isEmpty ? baseTrack.albumArtist : albumArtist
+                albumArtist: albumArtist.isEmpty ? baseTrack.albumArtist : albumArtist,
+                grouping:    grouping.isEmpty    ? baseTrack.grouping    : grouping
             )
             DispatchQueue.main.async { [weak self] in
                 self?.onTrackUpdate?(updated, state)
@@ -218,7 +232,7 @@ final class SwinsianMonitor: @unchecked Sendable {
         guard !raw.isEmpty else { return nil }
         let sep = String(UnicodeScalar(31)!)   // ASCII unit separator
         let fields = raw.components(separatedBy: sep)
-        guard fields.count == 7 else { return nil }
+        guard fields.count == 8 else { return nil }
         let title       = fields[0]
         let artist      = fields[1]
         let genre       = fields[2]
@@ -226,9 +240,11 @@ final class SwinsianMonitor: @unchecked Sendable {
         let year        = Int(fields[4])
         let comment     = fields[5].isEmpty ? nil : fields[5]
         let albumArtist = fields[6].isEmpty ? nil : fields[6]
+        let grouping    = fields[7].isEmpty ? nil : fields[7]
         guard !title.isEmpty, !pid.isEmpty else { return nil }
         return Track(title: title, artist: artist, genre: genre,
-                     persistentID: pid, year: year, comment: comment, albumArtist: albumArtist)
+                     persistentID: pid, year: year, comment: comment, albumArtist: albumArtist,
+                     grouping: grouping)
     }
 }
 

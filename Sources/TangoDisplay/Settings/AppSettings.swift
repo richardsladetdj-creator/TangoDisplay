@@ -96,6 +96,10 @@ final class AppSettings: ObservableObject {
         didSet { UserDefaults.standard.set(builtInOutputDeviceUID, forKey: kPrefix + "builtInOutputDeviceUID") }
     }
 
+    @Published var builtInHogMode: Bool {
+        didSet { UserDefaults.standard.set(builtInHogMode, forKey: kPrefix + "builtInHogMode") }
+    }
+
     @Published var eqBand0Gain: Float {
         didSet { UserDefaults.standard.set(eqBand0Gain, forKey: kPrefix + "eqBand0Gain") }
     }
@@ -171,6 +175,9 @@ final class AppSettings: ObservableObject {
     }
     @Published var showAlbumArtist: Bool {
         didSet { UserDefaults.standard.set(showAlbumArtist, forKey: kPrefix + "showAlbumArtist") }
+    }
+    @Published var showGrouping: Bool {
+        didSet { UserDefaults.standard.set(showGrouping, forKey: kPrefix + "showGrouping") }
     }
     @Published var genreColorsEnabled: Bool {
         didSet { UserDefaults.standard.set(genreColorsEnabled, forKey: kPrefix + "genreColorsEnabled") }
@@ -269,6 +276,7 @@ final class AppSettings: ObservableObject {
         builtInBalance = ud.object(forKey: kPrefix + "builtInBalance").flatMap { $0 as? Float } ?? 0.0
         builtInFadeDuration = ud.object(forKey: kPrefix + "builtInFadeDuration").flatMap { $0 as? Double } ?? 5.0
         builtInOutputDeviceUID = ud.string(forKey: kPrefix + "builtInOutputDeviceUID") ?? ""
+        builtInHogMode = ud.object(forKey: kPrefix + "builtInHogMode").flatMap { $0 as? Bool } ?? false
         eqBand0Gain = ud.object(forKey: kPrefix + "eqBand0Gain").flatMap { $0 as? Float } ?? 0.0
         eqBand1Gain = ud.object(forKey: kPrefix + "eqBand1Gain").flatMap { $0 as? Float } ?? 0.0
         eqBand2Gain = ud.object(forKey: kPrefix + "eqBand2Gain").flatMap { $0 as? Float } ?? 0.0
@@ -294,6 +302,7 @@ final class AppSettings: ObservableObject {
         showTime = ud.object(forKey: kPrefix + "showTime").flatMap { $0 as? Bool } ?? true
         showComments = ud.object(forKey: kPrefix + "showComments").flatMap { $0 as? Bool } ?? false
         showAlbumArtist = ud.object(forKey: kPrefix + "showAlbumArtist").flatMap { $0 as? Bool } ?? false
+        showGrouping = ud.object(forKey: kPrefix + "showGrouping").flatMap { $0 as? Bool } ?? false
         genreColorsEnabled = ud.object(forKey: kPrefix + "genreColorsEnabled").flatMap { $0 as? Bool } ?? false
         if let data = ud.data(forKey: kPrefix + "genreColorRules"),
            let rules = try? JSONDecoder().decode([GenreColorRule].self, from: data) {

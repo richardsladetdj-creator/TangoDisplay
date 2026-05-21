@@ -44,8 +44,8 @@ final class EmbracMonitor: @unchecked Sendable {
 
     // MARK: - AppleScript source
 
-    /// Returns fourteen newline-delimited fields: state, title, artist, genre, id, year,
-    /// comment, albumArtist, nextTitle, nextArtist, nextGenre, nextID, nextYear, nextAlbumArtist.
+    /// Returns fifteen newline-delimited fields: state, title, artist, genre, id, year,
+    /// comment, albumArtist, grouping, nextTitle, nextArtist, nextGenre, nextID, nextYear, nextAlbumArtist.
     /// Next-track fields are empty strings / "0" when there is no following track. Uses
     /// `player state as string` because Embrace's dictionary does not export `paused`
     /// as a named constant — comparing `player state is paused` throws -2753 at runtime.
@@ -54,7 +54,7 @@ final class EmbracMonitor: @unchecked Sendable {
             try
                 set idx to current index
                 if idx is 0 then
-                    return "stopped" & linefeed & "" & linefeed & "" & linefeed & "" & linefeed & "" & linefeed & "0" & linefeed & "" & linefeed & "" & linefeed & "" & linefeed & "" & linefeed & "" & linefeed & "0" & linefeed & ""
+                    return "stopped" & linefeed & "" & linefeed & "" & linefeed & "" & linefeed & "" & linefeed & "0" & linefeed & "" & linefeed & "" & linefeed & "" & linefeed & "" & linefeed & "" & linefeed & "" & linefeed & "0" & linefeed & ""
                 end if
                 set t to track idx
                 set theTitle to title of t
@@ -75,9 +75,14 @@ final class EmbracMonitor: @unchecked Sendable {
                     set theAlbumArtist to album artist of t
                     if theAlbumArtist is missing value then set theAlbumArtist to ""
                 end try
+                set theGrouping to ""
+                try
+                    set theGrouping to grouping of t
+                    if theGrouping is missing value then set theGrouping to ""
+                end try
                 set stateStr to player state as string
                 if stateStr is "stopped" then
-                    return "stopped" & linefeed & "" & linefeed & "" & linefeed & "" & linefeed & "" & linefeed & "0" & linefeed & "" & linefeed & "" & linefeed & "" & linefeed & "" & linefeed & "" & linefeed & "0" & linefeed & ""
+                    return "stopped" & linefeed & "" & linefeed & "" & linefeed & "" & linefeed & "" & linefeed & "0" & linefeed & "" & linefeed & "" & linefeed & "" & linefeed & "" & linefeed & "" & linefeed & "" & linefeed & "0" & linefeed & ""
                 end if
                 set totalTracks to count of tracks
                 set nextTitle to ""
@@ -101,16 +106,16 @@ final class EmbracMonitor: @unchecked Sendable {
                         if nextAlbumArtist is missing value then set nextAlbumArtist to ""
                     end try
                 end if
-                return stateStr & linefeed & theTitle & linefeed & theArtist & linefeed & theGenre & linefeed & theID & linefeed & theYear & linefeed & theComment & linefeed & theAlbumArtist & linefeed & nextTitle & linefeed & nextArtist & linefeed & nextGenre & linefeed & nextID & linefeed & nextYear & linefeed & nextAlbumArtist
+                return stateStr & linefeed & theTitle & linefeed & theArtist & linefeed & theGenre & linefeed & theID & linefeed & theYear & linefeed & theComment & linefeed & theAlbumArtist & linefeed & theGrouping & linefeed & nextTitle & linefeed & nextArtist & linefeed & nextGenre & linefeed & nextID & linefeed & nextYear & linefeed & nextAlbumArtist
             on error
-                return "stopped" & linefeed & "" & linefeed & "" & linefeed & "" & linefeed & "" & linefeed & "0" & linefeed & "" & linefeed & "" & linefeed & "" & linefeed & "" & linefeed & "" & linefeed & "0" & linefeed & ""
+                return "stopped" & linefeed & "" & linefeed & "" & linefeed & "" & linefeed & "" & linefeed & "0" & linefeed & "" & linefeed & "" & linefeed & "" & linefeed & "" & linefeed & "" & linefeed & "" & linefeed & "0" & linefeed & ""
             end try
         end tell
         """
 
     /// Returns the full setlist as newline-delimited text.
     /// Line 0: current index (1-based), or "0" on stopped/error.
-    /// Lines 1…N: seven lines per track — title, artist, genre, id, year, comment, albumArtist.
+    /// Lines 1…N: eight lines per track — title, artist, genre, id, year, comment, albumArtist, grouping.
     private static let playlistScript = """
         tell application "Embrace"
             try
@@ -138,7 +143,12 @@ final class EmbracMonitor: @unchecked Sendable {
                         set theAlbumArtist to album artist of t
                         if theAlbumArtist is missing value then set theAlbumArtist to ""
                     end try
-                    set output to output & linefeed & theTitle & linefeed & theArtist & linefeed & theGenre & linefeed & theID & linefeed & theYear & linefeed & theComment & linefeed & theAlbumArtist
+                    set theGrouping to ""
+                    try
+                        set theGrouping to grouping of t
+                        if theGrouping is missing value then set theGrouping to ""
+                    end try
+                    set output to output & linefeed & theTitle & linefeed & theArtist & linefeed & theGenre & linefeed & theID & linefeed & theYear & linefeed & theComment & linefeed & theAlbumArtist & linefeed & theGrouping
                 end repeat
                 return output
             on error
@@ -242,20 +252,22 @@ final class EmbracMonitor: @unchecked Sendable {
               currentIndex > 0 else { return nil }
 
         let trackLines = Array(lines.dropFirst())
-        let trackCount = trackLines.count / 7
+        let trackCount = trackLines.count / 8
         guard trackCount > 0 else { return nil }
 
         var tracks: [Track] = []
         tracks.reserveCapacity(trackCount)
         for i in 0..<trackCount {
-            let base = i * 7
-            guard base + 6 < trackLines.count else { break }
+            let base = i * 8
+            guard base + 7 < trackLines.count else { break }
             let pid             = trackLines[base + 3].trimmingCharacters(in: .whitespaces)
             let yearRaw         = Int(trackLines[base + 4].trimmingCharacters(in: .whitespaces)) ?? 0
             let commentRaw      = trackLines[base + 5]
             let comment         = commentRaw.isEmpty ? nil : commentRaw
             let albumArtistRaw  = trackLines[base + 6]
             let albumArtist     = albumArtistRaw.isEmpty ? nil : albumArtistRaw
+            let groupingRaw     = trackLines[base + 7]
+            let grouping        = groupingRaw.isEmpty ? nil : groupingRaw
             tracks.append(Track(
                 title:        trackLines[base],
                 artist:       trackLines[base + 1],
@@ -263,7 +275,8 @@ final class EmbracMonitor: @unchecked Sendable {
                 persistentID: pid,
                 year:         yearRaw > 0 ? yearRaw : nil,
                 comment:      comment,
-                albumArtist:  albumArtist
+                albumArtist:  albumArtist,
+                grouping:     grouping
             ))
         }
 
@@ -312,8 +325,8 @@ final class EmbracMonitor: @unchecked Sendable {
 
     // MARK: - Output parsing
 
-    /// Parses fourteen newline-delimited fields: state, title, artist, genre, id, year,
-    /// comment, albumArtist, nextTitle, nextArtist, nextGenre, nextID, nextYear, nextAlbumArtist.
+    /// Parses fifteen newline-delimited fields: state, title, artist, genre, id, year,
+    /// comment, albumArtist, grouping, nextTitle, nextArtist, nextGenre, nextID, nextYear, nextAlbumArtist.
     /// Returns (currentTrack, nextTrack, playerState).
     private func parseOutput(_ output: String) -> (Track?, Track?, PlayerState) {
         // osascript appends a trailing newline; split keeping empty strings to preserve indices
@@ -334,18 +347,20 @@ final class EmbracMonitor: @unchecked Sendable {
         let comment         = commentRaw.isEmpty ? nil : commentRaw
         let albumArtistRaw  = lines.count > 7 ? lines[7] : ""
         let albumArtist     = albumArtistRaw.isEmpty ? nil : albumArtistRaw
+        let groupingRaw     = lines.count > 8 ? lines[8] : ""
+        let grouping        = groupingRaw.isEmpty ? nil : groupingRaw
 
         guard !pid.isEmpty || !title.isEmpty else { return (nil, nil, .stopped) }
 
-        let currentTrack = Track(title: title, artist: artist, genre: genre, persistentID: pid, year: year, comment: comment, albumArtist: albumArtist)
+        let currentTrack = Track(title: title, artist: artist, genre: genre, persistentID: pid, year: year, comment: comment, albumArtist: albumArtist, grouping: grouping)
 
-        let nextTitle          = lines.count > 8  ? lines[8] : ""
-        let nextArtist         = lines.count > 9  ? lines[9] : ""
-        let nextGenre          = lines.count > 10 ? lines[10] : ""
-        let nextID             = lines.count > 11 ? lines[11].trimmingCharacters(in: .whitespaces) : ""
-        let nextYearRaw        = lines.count > 12 ? Int(lines[12].trimmingCharacters(in: .whitespaces)) ?? 0 : 0
+        let nextTitle          = lines.count > 9  ? lines[9] : ""
+        let nextArtist         = lines.count > 10 ? lines[10] : ""
+        let nextGenre          = lines.count > 11 ? lines[11] : ""
+        let nextID             = lines.count > 12 ? lines[12].trimmingCharacters(in: .whitespaces) : ""
+        let nextYearRaw        = lines.count > 13 ? Int(lines[13].trimmingCharacters(in: .whitespaces)) ?? 0 : 0
         let nextYear           = nextYearRaw > 0 ? nextYearRaw : nil
-        let nextAlbumArtistRaw = lines.count > 13 ? lines[13] : ""
+        let nextAlbumArtistRaw = lines.count > 14 ? lines[14] : ""
         let nextAlbumArtist    = nextAlbumArtistRaw.isEmpty ? nil : nextAlbumArtistRaw
 
         let nextTrack: Track? = nextID.isEmpty && nextTitle.isEmpty ? nil :

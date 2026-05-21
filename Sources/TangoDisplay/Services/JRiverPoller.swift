@@ -179,7 +179,7 @@ final class JRiverPoller: MusicPlayerSource {
     // MARK: - Step 2: Enrich current track metadata
 
     private func fetchMetadata(fileKey: String, title: String, artist: String, genre: String, state: PlayerState) {
-        guard let url = URL(string: "\(baseURL)/File/GetInfo?File=\(fileKey)&Fields=Album%20Artist,Date%20(year),Comment&Format=XML") else {
+        guard let url = URL(string: "\(baseURL)/File/GetInfo?File=\(fileKey)&Fields=Album%20Artist,Date%20(year),Comment,Grouping&Format=XML") else {
             let track = Track(title: title, artist: artist, genre: genre, persistentID: fileKey, year: nil, comment: nil, albumArtist: nil)
             handleSuccess()
             DispatchQueue.main.async { self.onTrackUpdate?(track, state) }
@@ -193,6 +193,7 @@ final class JRiverPoller: MusicPlayerSource {
             var albumArtist: String? = nil
             var year: Int? = nil
             var comment: String? = nil
+            var grouping: String? = nil
 
             if let data, let xml = String(data: data, encoding: .utf8) {
                 let aa = self.decodeXML(self.extractFieldValue(xml, fieldName: "Album Artist"))
@@ -203,6 +204,9 @@ final class JRiverPoller: MusicPlayerSource {
 
                 let cm = self.decodeXML(self.extractFieldValue(xml, fieldName: "Comment"))
                 if !cm.isEmpty { comment = cm }
+
+                let gp = self.decodeXML(self.extractFieldValue(xml, fieldName: "Grouping"))
+                if !gp.isEmpty { grouping = gp }
             }
 
             let track = Track(
@@ -212,7 +216,8 @@ final class JRiverPoller: MusicPlayerSource {
                 persistentID: fileKey,
                 year: year,
                 comment: comment,
-                albumArtist: albumArtist
+                albumArtist: albumArtist,
+                grouping: grouping
             )
             self.handleSuccess()
             DispatchQueue.main.async { self.onTrackUpdate?(track, state) }
@@ -223,7 +228,7 @@ final class JRiverPoller: MusicPlayerSource {
     // MARK: - Next track (cortina preview)
 
     private func fetchNextTrackMetadata(fileKey: String) {
-        guard let url = URL(string: "\(baseURL)/File/GetInfo?File=\(fileKey)&Fields=Name,Artist,Genre,Album%20Artist,Date%20(year),Comment&Format=XML") else {
+        guard let url = URL(string: "\(baseURL)/File/GetInfo?File=\(fileKey)&Fields=Name,Artist,Genre,Album%20Artist,Date%20(year),Comment,Grouping&Format=XML") else {
             DispatchQueue.main.async { self.onNextTrackUpdate?(nil) }
             return
         }
@@ -241,6 +246,7 @@ final class JRiverPoller: MusicPlayerSource {
             let genre   = self.decodeXML(self.extractFieldValue(xml, fieldName: "Genre"))
             let yearStr = self.extractFieldValue(xml, fieldName: "Date (year)")
             let cm      = self.decodeXML(self.extractFieldValue(xml, fieldName: "Comment"))
+            let gp      = self.decodeXML(self.extractFieldValue(xml, fieldName: "Grouping"))
 
             let nextTrack = Track(
                 title: title,
@@ -249,7 +255,8 @@ final class JRiverPoller: MusicPlayerSource {
                 persistentID: fileKey,
                 year: Int(yearStr),
                 comment: cm.isEmpty ? nil : cm,
-                albumArtist: aa.isEmpty ? nil : aa
+                albumArtist: aa.isEmpty ? nil : aa,
+                grouping: gp.isEmpty ? nil : gp
             )
             DispatchQueue.main.async { self.onNextTrackUpdate?(nextTrack) }
         }.resume()
@@ -301,6 +308,7 @@ final class JRiverPoller: MusicPlayerSource {
             let fileKey = extractFieldFromPlaylist(item, fieldName: "Key")
             let aa      = decodeXML(extractFieldFromPlaylist(item, fieldName: "Album Artist"))
             let yearStr = extractFieldFromPlaylist(item, fieldName: "Date (year)")
+            let gp      = decodeXML(extractFieldFromPlaylist(item, fieldName: "Grouping"))
 
             guard !title.isEmpty, !fileKey.isEmpty else { continue }
 
@@ -311,7 +319,8 @@ final class JRiverPoller: MusicPlayerSource {
                 persistentID: fileKey,
                 year: Int(yearStr),
                 comment: nil,
-                albumArtist: aa.isEmpty ? nil : aa
+                albumArtist: aa.isEmpty ? nil : aa,
+                grouping: gp.isEmpty ? nil : gp
             ))
         }
         return tracks

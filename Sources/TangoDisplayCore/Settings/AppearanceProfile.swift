@@ -520,6 +520,7 @@ public struct AppearanceProfile: Codable, Identifiable, Equatable {
         switch singerSource {
         case .comments:    return track.comment
         case .albumArtist: return track.albumArtist
+        case .grouping:    return track.grouping
         }
     }
 
@@ -592,11 +593,13 @@ public enum DisplayTextItem: String, Codable, CaseIterable {
 public enum SingerSource: String, Codable, CaseIterable {
     case comments    = "comments"
     case albumArtist = "albumArtist"
+    case grouping    = "grouping"
 
     public var displayName: String {
         switch self {
         case .comments:    "Comments"
         case .albumArtist: "Album Artist"
+        case .grouping:    "Grouping"
         }
     }
 }

@@ -140,7 +140,7 @@ Right-click any row:
 |---|---|
 | **Mark as Played** | Stamps a queued track as played without playing it |
 | **Mark as Not Played** | Resets a played track to queued so it will play again |
-| **Stop after Playing** | Sets a stop marker — playback halts automatically when this track finishes. Shows as **Resume after Playing** when already set; click again to clear it. |
+| **Stop after Playing** | Sets a stop marker — playback halts automatically when this track finishes. Can also be set on the currently playing track. Shows as **Resume after Playing** when already set; click again to clear it. |
 | **Delete** | Removes the track from the setlist (asks for confirmation) |
 | **Ignore Auto-gap before this Track** | Disables auto-gap for this track only. Shows as **Resume Auto-gap** when already set; click again to re-enable it. |
 | **Skip Auto-fade** | Disables auto-fade for this cortina track only, re-enabling the Fade & Stop and Fade & Continue buttons for manual control. Available only when Auto-fade is enabled and fading has not yet started. |
@@ -168,7 +168,7 @@ A status bar at the bottom of the track list shows:
 
 - **Total duration & remaining count** — the combined length of all tracks followed by the number of unplayed tracks (e.g. "1h 42m · 28 remaining")
 - **Next cortina** — a live countdown showing how much time remains before the next cortina begins, based on the current elapsed position and queued track durations. Shows "0s" when a cortina is already playing.
-- **Estimated end time** — a projected clock time when the setlist will finish, calculated from the current elapsed position, all remaining queued tracks, and any stop-after marker (e.g. "Ends ~23:45")
+- **Estimated end time** — a projected clock time when the setlist will finish, calculated from the current elapsed position, all remaining queued tracks, and any stop-after marker (e.g. "Ends ~23:45"). For cortinas with Auto-fade enabled, the effective play duration (play time + fade duration) is used rather than the full track length, so the estimate stays accurate when cortinas fade early.
 - **Auto-gap status** — when auto-gap is enabled, a small green dot and the live gap duration (e.g. "Auto-gap: 2.0s") appear. The dot turns grey and the label reads "Auto-gap: off" when the feature is disabled. The duration updates in real time as you adjust the slider.
 - **Auto-fade status** — when auto-fade is enabled, a small orange dot and "Auto-fade: on" label appear alongside the auto-gap indicator. The dot turns grey and the label reads "Auto-fade: off" when the feature is disabled.
 
@@ -448,6 +448,14 @@ By default the built-in player uses the macOS system default output device. To r
 
 The list shows all currently available audio output devices. If the selected device is disconnected, playback falls back to the system default automatically.
 
+### Exclusive Mode (Hog Mode)
+
+Enable **Exclusive mode (Hog Mode)** in **Player Settings** to give TangoDisplay exclusive access to the selected audio device. While active, no other app (Music.app, Spotify, system alerts) can use the same interface — useful for DJ setups where you want to guarantee the audio path is clean.
+
+- The toggle is only available when a specific output device is selected (not the system default).
+- If another process already owns the device when you enable Hog Mode, an orange warning banner appears in the Setlist view with a **Retry** button. Once the other app releases its hold, tap Retry to acquire exclusive access.
+- Hog Mode is released automatically when TangoDisplay quits or you switch back to the system default output.
+
 ---
 
 ## Integration with the Display
@@ -530,6 +538,7 @@ Toggles for which fields appear in setlist rows (visible only with Built-in Play
 | Time | On | Shows duration and current position |
 | Comments | Off | |
 | Album Artist | Off | |
+| Grouping | Off | |
 
 ### Genre Colours
 

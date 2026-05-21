@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import TangoDisplayCore
 import UniformTypeIdentifiers
 
 private extension Array {
@@ -46,6 +47,7 @@ struct SetlistView: View {
     @State private var scrollTrigger: UUID? = nil
     @State private var showLastTandaWarning = false
     @State private var pasteMonitor: Any? = nil
+    @State private var hogConflictWarning = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -55,6 +57,28 @@ struct SetlistView: View {
             .environmentObject(appState)
 
             Divider()
+
+            if hogConflictWarning {
+                HStack(spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundColor(.orange)
+                        .font(.system(size: 12))
+                    Text("Another app has exclusive access to the audio output. Playback may fail — go to Player Settings to release it.")
+                        .font(.system(size: 12))
+                        .foregroundColor(.primary)
+                    Spacer()
+                    Button("Retry") {
+                        player.retryOutputDevice()
+                    }
+                    .font(.system(size: 12))
+                    .buttonStyle(.borderless)
+                    .foregroundColor(.accentColor)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(Color.orange.opacity(0.1))
+                Divider()
+            }
 
             if setlist.entries.isEmpty {
                 emptyDropZone
@@ -77,6 +101,7 @@ struct SetlistView: View {
         .onAppear {
             activeEntryID = player.currentEntryID
             isPlayerActive = player.isActivePlaying
+            hogConflictWarning = player.hogModeConflict
             guard pasteMonitor == nil else { return }
             pasteMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
                 guard event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command,
@@ -91,6 +116,7 @@ struct SetlistView: View {
         }
         .onReceive(player.$currentEntryID) { activeEntryID = $0 }
         .onReceive(player.$isActivePlaying) { isPlayerActive = $0 }
+        .onReceive(player.$hogModeConflict) { hogConflictWarning = $0 }
         .alert("Save Setlist Report", isPresented: $showSaveReportDialog) {
             TextField("Setlist name", text: $saveReportName)
             Button("Save") {
@@ -204,6 +230,7 @@ struct SetlistView: View {
             showTime: settings.showTime,
             showComments: settings.showComments,
             showAlbumArtist: settings.showAlbumArtist,
+            showGrouping: settings.showGrouping,
             wouldSkipAutoGap: wouldSkipAutoGap,
             autoFadeCortinasEnabled: settings.autoFadeCortinasEnabled,
             isLastTanda: entry.isLastTanda,
@@ -402,7 +429,7 @@ struct SetlistView: View {
         if targets.count == 1, let id = targets.first,
            let e = setlist.entries.first(where: { $0.id == id }) {
             Divider()
-            if e.state != .played {
+            if e.state != .played || e.id == player.currentEntryID {
                 Button {
                     setlist.stopAfterEntryID = (setlist.stopAfterEntryID == id) ? nil : id
                 } label: {
@@ -657,19 +684,36 @@ private struct StatusBarView: View {
         return 0
     }
 
+    private func effectiveDuration(for entry: SetlistEntry, detector: CortinaDetector) -> TimeInterval {
+        let duration = entry.duration ?? 0
+        guard settings.autoFadeCortinasEnabled,
+              !entry.ignoresAutoFade,
+              detector.isCortina(genre: entry.track.genre) else {
+            return duration
+        }
+        let fade = settings.builtInFadeDuration
+        let play = settings.cortinaPlayTime
+        let delay: Double
+        if duration > play + fade { delay = play }
+        else if duration > fade   { delay = duration - fade }
+        else                      { delay = 0 }
+        return min(duration, delay + fade + 1.0)
+    }
+
     private var setEndTime: Date? {
         guard appState.currentPlayerState != .stopped else { return nil }
         var remaining: TimeInterval = 0
         let stopAfterID = setlist.stopAfterEntryID
+        let detector = settings.makeDetector()
         for entry in setlist.entries {
             switch entry.state {
             case .playing:
-                remaining += max(0, (entry.duration ?? 0) - player.elapsed)
+                remaining += max(0, effectiveDuration(for: entry, detector: detector) - player.elapsed)
             case .paused, .queued:
-                remaining += entry.duration ?? 0
+                remaining += effectiveDuration(for: entry, detector: detector)
             case .played:
                 if entry.id == player.currentEntryID {
-                    remaining += max(0, (entry.duration ?? 0) - player.elapsed)
+                    remaining += max(0, effectiveDuration(for: entry, detector: detector) - player.elapsed)
                 }
             }
             if let stopID = stopAfterID, entry.id == stopID { break }
@@ -734,6 +778,7 @@ struct SetlistRowView: View {
     var showTime: Bool = true
     var showComments: Bool = false
     var showAlbumArtist: Bool = false
+    var showGrouping: Bool = false
     var wouldSkipAutoGap: Bool = false
     var autoFadeCortinasEnabled: Bool = false
     var isLastTanda: Bool = false
@@ -767,7 +812,8 @@ struct SetlistRowView: View {
                         .lineLimit(1)
                     let extraParts = [
                         showComments ? entry.track.comment : nil,
-                        showAlbumArtist ? entry.track.albumArtist : nil
+                        showAlbumArtist ? entry.track.albumArtist : nil,
+                        showGrouping ? entry.track.grouping : nil
                     ].compactMap { $0 }.filter { !$0.isEmpty }
                     if !extraParts.isEmpty {
                         Text(extraParts.joined(separator: " · "))

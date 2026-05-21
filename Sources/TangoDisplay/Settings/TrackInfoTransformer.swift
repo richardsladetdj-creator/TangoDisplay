@@ -6,26 +6,29 @@ enum TrackInfoField: String, CaseIterable, Codable, Identifiable {
     case year
     case albumArtist
     case comments
+    case grouping
 
     var id: String { rawValue }
 
     var displayName: String {
         switch self {
-        case .artist:     return "Artist"
-        case .title:      return "Title"
-        case .year:       return "Year"
+        case .artist:      return "Artist"
+        case .title:       return "Title"
+        case .year:        return "Year"
         case .albumArtist: return "Album Artist"
-        case .comments:   return "Comments"
+        case .comments:    return "Comments"
+        case .grouping:    return "Grouping"
         }
     }
 
     var sampleValue: String {
         switch self {
-        case .artist:     return "Osvaldo Fresedo"
-        case .title:      return "Arrabalero - 440 Hz"
-        case .year:       return "1939"
+        case .artist:      return "Osvaldo Fresedo"
+        case .title:       return "Arrabalero - 440 Hz"
+        case .year:        return "1939"
         case .albumArtist: return "Osvaldo Fresedo"
-        case .comments:   return "instrumental"
+        case .comments:    return "instrumental"
+        case .grouping:    return "Vals"
         }
     }
 }

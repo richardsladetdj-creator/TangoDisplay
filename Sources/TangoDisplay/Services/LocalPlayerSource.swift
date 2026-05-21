@@ -39,6 +39,8 @@ final class LocalPlayerSource: NSObject, ObservableObject, MusicPlayerSource {
     // MARK: - Diagnostics
 
     @Published private(set) var replayGainStatus: String = ""
+    @Published private(set) var hogModeConflict: Bool = false
+    @Published private(set) var isChangingDevice: Bool = false
 
     // MARK: - Private — audio engine
 
@@ -62,6 +64,8 @@ final class LocalPlayerSource: NSObject, ObservableObject, MusicPlayerSource {
     private var cancellables = Set<AnyCancellable>()
     private var earlyMarkedEntryIDs: Set<UUID> = []
     private var scheduleGeneration: Int = 0
+    private var hoggedDeviceUID: String? = nil
+    private let audioDeviceQueue = DispatchQueue(label: "com.tangodisplay.audio-device", qos: .userInitiated)
 
     // MARK: - Private — Audio Unit plugin
 
@@ -156,24 +160,104 @@ final class LocalPlayerSource: NSObject, ObservableObject, MusicPlayerSource {
     }
 
     private func applyOutputDevice(_ uid: String) {
+        // Fast pre-check on the calling thread — if another process owns the hog, leave the
+        // engine on its current device so play continues to work without hanging.
+        if !uid.isEmpty {
+            let owner = AudioDeviceManager.hogOwner(forUID: uid)
+            if owner != -1 && owner != getpid() {
+                hogModeConflict = true
+                os_log(.error, "TangoDisplay: device %{public}@ is hogged by pid %d", uid, owner)
+                return
+            }
+        }
+        hogModeConflict = false
+
+        // Capture values on the calling thread (main) before dispatching blocking work.
         guard let audioUnit = audioEngine.outputNode.audioUnit else { return }
         let wasPlaying = isActivePlaying
         let savedElapsed = elapsed
-        // CoreAudio requires the engine to be stopped before changing the output device.
-        if audioEngine.isRunning {
-            playerNode.stop()
-            audioEngine.stop()
-        }
-        setOutputDeviceProperty(audioUnit: audioUnit, uid: uid)
-        do {
-            try audioEngine.start()
-            levelMeter.reinstallTap()
-            if audioFile != nil {
-                seekTo(savedElapsed)
-                if wasPlaying { playerNode.play() }
+        let hogEnabled = settings.builtInHogMode
+
+        isChangingDevice = true
+
+        audioDeviceQueue.async { [weak self] in
+            guard let self else { return }
+
+            // Release hog on the previous device.
+            if let prev = self.hoggedDeviceUID {
+                AudioDeviceManager.releaseHogMode(forUID: prev)
+                self.hoggedDeviceUID = nil
             }
-        } catch {
-            os_log(.error, "TangoDisplay: applyOutputDevice engine restart failed: %{public}@", error.localizedDescription)
+
+            // CoreAudio stop/start can block — must be off the main thread.
+            if self.audioEngine.isRunning {
+                self.playerNode.stop()
+                self.audioEngine.stop()
+            }
+
+            self.setOutputDeviceProperty(audioUnit: audioUnit, uid: uid)
+
+            do {
+                try self.audioEngine.start()
+
+                // Acquire hog mode on the audio queue (CoreAudio property set).
+                if hogEnabled && !uid.isEmpty {
+                    if AudioDeviceManager.acquireHogMode(forUID: uid) {
+                        self.hoggedDeviceUID = uid
+                        DispatchQueue.main.async { self.hogModeConflict = false }
+                    } else {
+                        DispatchQueue.main.async { self.hogModeConflict = true }
+                        os_log(.error, "TangoDisplay: failed to acquire hog mode on %{public}@", uid)
+                    }
+                }
+
+                // AVAudioEngine player ops and tap reinstall must be on main.
+                DispatchQueue.main.async {
+                    self.levelMeter.reinstallTap()
+                    if self.audioFile != nil {
+                        self.seekTo(savedElapsed)
+                        if wasPlaying { self.playerNode.play() }
+                    }
+                    self.isChangingDevice = false
+                }
+            } catch {
+                os_log(.error, "TangoDisplay: applyOutputDevice engine restart failed: %{public}@",
+                       error.localizedDescription)
+                DispatchQueue.main.async { self.isChangingDevice = false }
+            }
+        }
+    }
+
+    private func applyHogMode(enabled: Bool, deviceUID: String) {
+        // Must be called from audioDeviceQueue. All @Published writes dispatch back to main.
+        if let prev = hoggedDeviceUID {
+            AudioDeviceManager.releaseHogMode(forUID: prev)
+            hoggedDeviceUID = nil
+        }
+        guard enabled, !deviceUID.isEmpty else {
+            let conflict: Bool
+            if !deviceUID.isEmpty {
+                let owner = AudioDeviceManager.hogOwner(forUID: deviceUID)
+                conflict = owner != -1 && owner != getpid()
+            } else {
+                conflict = false
+            }
+            DispatchQueue.main.async { self.hogModeConflict = conflict }
+            return
+        }
+        if AudioDeviceManager.acquireHogMode(forUID: deviceUID) {
+            hoggedDeviceUID = deviceUID
+            DispatchQueue.main.async { self.hogModeConflict = false }
+        } else {
+            DispatchQueue.main.async { self.hogModeConflict = true }
+            os_log(.error, "TangoDisplay: failed to acquire hog mode on device %{public}@", deviceUID)
+        }
+    }
+
+    deinit {
+        let uid = hoggedDeviceUID
+        audioDeviceQueue.async {
+            if let uid { AudioDeviceManager.releaseHogMode(forUID: uid) }
         }
     }
 
@@ -558,6 +642,10 @@ final class LocalPlayerSource: NSObject, ObservableObject, MusicPlayerSource {
         reportCurrentState()
     }
 
+    func retryOutputDevice() {
+        applyOutputDevice(settings.builtInOutputDeviceUID)
+    }
+
     // MARK: - Private: seek implementation
 
     private func seekTo(_ seconds: Double, completion: (() -> Void)? = nil) {
@@ -936,6 +1024,19 @@ final class LocalPlayerSource: NSObject, ObservableObject, MusicPlayerSource {
         settings.$builtInOutputDeviceUID
             .receive(on: DispatchQueue.main)
             .sink { [weak self] uid in self?.applyOutputDevice(uid) }
+            .store(in: &cancellables)
+
+        settings.$builtInHogMode
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] enabled in
+                guard let self else { return }
+                let uid = self.settings.builtInOutputDeviceUID
+                self.isChangingDevice = true
+                self.audioDeviceQueue.async {
+                    self.applyHogMode(enabled: enabled, deviceUID: uid)
+                    DispatchQueue.main.async { self.isChangingDevice = false }
+                }
+            }
             .store(in: &cancellables)
 
         settings.$eqBand0Gain.sink { [weak self] v in self?.eq.bands[0].gain = v }.store(in: &cancellables)

@@ -110,7 +110,13 @@ struct CortinaView: View {
                             if showComingUp, let next = state.nextTrack,
                                profile.showSingerCortina,
                                let rawSinger = profile.singerValue(from: next), !rawSinger.isEmpty {
-                                let singerField: TrackInfoField = profile.singerSource == .albumArtist ? .albumArtist : .comments
+                                let singerField: TrackInfoField = {
+                                    switch profile.singerSource {
+                                    case .albumArtist: return .albumArtist
+                                    case .comments:    return .comments
+                                    case .grouping:    return .grouping
+                                    }
+                                }()
                                 let singer = settings.transform(rawSinger, for: singerField)
                                 if !singer.isEmpty {
                                     Text(singer)
