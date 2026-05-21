@@ -6,14 +6,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var appState: AppState?
 
     private let hotkeyService = HotkeyService()
-    private var menuBarController: MenuBarController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         guard let appState else { return }
         appState.profileStore.load()
         appState.start()
         hotkeyService.register(appState: appState)
-        menuBarController = MenuBarController(appState: appState)
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {

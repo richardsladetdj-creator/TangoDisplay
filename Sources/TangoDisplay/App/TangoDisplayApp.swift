@@ -52,5 +52,24 @@ struct TangoDisplayApp: App {
                 .environmentObject(appState.settings)
         }
         .defaultSize(width: 1280, height: 720)
+
+        // Menu bar icon — MenuBarExtra (macOS 13+) replaces deprecated NSStatusItem
+        MenuBarExtra("TangoDisplay", systemImage: "tv") {
+            Button("Show Display Window") {
+                WindowManager.showPresentationWindow(appState: appState)
+            }
+            Button("Show Settings Window") {
+                WindowManager.showControlWindow()
+            }
+            Button("Show Setlist") {
+                WindowManager.showControlWindow()
+                NotificationCenter.default.post(name: .navigateToSetlist, object: nil)
+            }
+            Divider()
+            Button("Quit TangoDisplay") {
+                NSApp.terminate(nil)
+            }
+        }
+        .menuBarExtraStyle(.menu)
     }
 }
