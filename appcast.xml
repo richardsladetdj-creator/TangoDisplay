@@ -4,6 +4,22 @@
         <title>TangoDisplay</title>
         <link>https://github.com/richardsladetdj-creator/TangoDisplay</link>
         <item>
+            <title>Version 3.20.1</title>
+            <pubDate>Sun, 25 May 2026 12:00:00 +0000</pubDate>
+            <sparkle:version>67</sparkle:version>
+            <sparkle:shortVersionString>3.20.1</sparkle:shortVersionString>
+            <description><![CDATA[
+                <ul>
+                    <li>Fix: Changing the audio output device while a setlist track was paused incorrectly triggered auto-advance to the next track and started playback. The player now stays paused when the output device is changed.</li>
+                </ul>
+            ]]></description>
+            <enclosure
+                url="https://github.com/richardsladetdj-creator/TangoDisplay/releases/download/v3.20.1/TangoDisplay-v3.20.1-universal.zip"
+                sparkle:edSignature="BcCzx92ClWvW1xTNa7EF0nN6QIfcBkbikM1Bs2K0moRkpJ0z9PA8OaTxSBSb5MPRVXWudi4AoXQYT+e1C1qVBg=="
+                length="5330664"
+                type="application/zip"/>
+        </item>
+        <item>
             <title>Version 3.20.0</title>
             <pubDate>Thu, 22 May 2026 12:00:00 +0000</pubDate>
             <sparkle:version>66</sparkle:version>
