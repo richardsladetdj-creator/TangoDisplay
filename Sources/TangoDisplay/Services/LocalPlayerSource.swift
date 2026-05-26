@@ -983,7 +983,8 @@ final class LocalPlayerSource: NSObject, ObservableObject, MusicPlayerSource {
                         reason: "Plugin editor unavailable")
                     return
                 }
-                let window = NSWindow(contentViewController: vc)
+                let wrapper = PluginWindowViewController(pluginVC: vc, player: self)
+                let window = NSWindow(contentViewController: wrapper)
                 window.title = self.settings.selectedAudioUnitPlugin?.name ?? "Plugin"
                 window.styleMask = [.titled, .closable, .resizable]
                 window.isReleasedWhenClosed = false
