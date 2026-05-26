@@ -81,6 +81,7 @@ final class LocalPlayerSource: NSObject, ObservableObject, MusicPlayerSource {
     @Published private(set) var activePresetID: UUID? = nil
     private var parameterObserverToken: AUParameterObserverToken?
     private var parameterObserverTree: AUParameterTree?
+    private var currentPresetObservation: NSKeyValueObservation?
     private var isApplyingPreset = false
 
     // MARK: - Private — auto-gap
@@ -1008,13 +1009,13 @@ final class LocalPlayerSource: NSObject, ObservableObject, MusicPlayerSource {
         guard let avUnit = activeAudioUnitPlugin, let manager = presetManager else { return }
         isApplyingPreset = true
         do {
-            try manager.applyPreset(preset, to: avUnit)
+            try manager.applyPreset(preset, to: avUnit, originator: parameterObserverToken)
             activePresetID = preset.id
             settings.lastUsedAUPresetName = preset.name
         } catch {
             os_log(.error, "TangoDisplay: applyPreset failed: %{public}@", error.localizedDescription)
         }
-        DispatchQueue.main.async { [weak self] in self?.isApplyingPreset = false }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in self?.isApplyingPreset = false }
     }
 
     func saveCurrentAsPreset(named name: String) throws {
@@ -1082,12 +1083,7 @@ final class LocalPlayerSource: NSObject, ObservableObject, MusicPlayerSource {
                     self.presetManager = manager
                     let allPresets = manager.factoryPresets(for: avUnit) + manager.userPresets()
                     self.availablePresets = allPresets
-                    if let savedName = self.settings.lastUsedAUPresetName,
-                       let match = allPresets.first(where: { $0.name == savedName }) {
-                        try? manager.applyPreset(match, to: avUnit)
-                        self.activePresetID = match.id
-                    }
-                    // Clear active preset when the user modifies parameters in the native UI
+                    // Install observers first so tokens are available when applying the restore preset.
                     if let tree = avUnit.auAudioUnit.parameterTree {
                         self.parameterObserverTree = tree
                         self.parameterObserverToken = tree.token(byAddingParameterObserver: { [weak self] _, _ in
@@ -1097,6 +1093,28 @@ final class LocalPlayerSource: NSObject, ObservableObject, MusicPlayerSource {
                                 self.settings.lastUsedAUPresetName = nil
                             }
                         })
+                    }
+                    // Also watch currentPreset via KVO: V2 AU UIs (e.g. AUGraphicEQ "Flat" button)
+                    // apply factory presets through the V2 path which doesn't fire the parameter tree
+                    // observer above, but does change currentPreset.
+                    self.currentPresetObservation = avUnit.auAudioUnit.observe(
+                        \.currentPreset, options: [.new]
+                    ) { [weak self] _, _ in
+                        DispatchQueue.main.async {
+                            guard let self, !self.isApplyingPreset else { return }
+                            self.activePresetID = nil
+                            self.settings.lastUsedAUPresetName = nil
+                        }
+                    }
+                    // Restore last-used preset with guard flags to suppress observer feedback.
+                    if let savedName = self.settings.lastUsedAUPresetName,
+                       let match = allPresets.first(where: { $0.name == savedName }) {
+                        self.isApplyingPreset = true
+                        try? manager.applyPreset(match, to: avUnit, originator: self.parameterObserverToken)
+                        self.activePresetID = match.id
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                            self?.isApplyingPreset = false
+                        }
                     }
                 }
             } catch {
@@ -1119,6 +1137,7 @@ final class LocalPlayerSource: NSObject, ObservableObject, MusicPlayerSource {
         }
         parameterObserverToken = nil
         parameterObserverTree = nil
+        currentPresetObservation = nil
         activeAudioUnitPlugin = nil
         presetManager = nil
         availablePresets = []

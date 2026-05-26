@@ -432,6 +432,28 @@ The plugin occupies a single slot in the audio chain — only one plugin can be 
 
 To swap plugins, click **Choose…** again — the previous plugin is unloaded and replaced.
 
+### Presets
+
+Presets let you save and recall complete plugin configurations — useful for switching between EQ curves for different rooms or recording eras.
+
+**In Settings › Player:**
+
+| Control | What it does |
+|---|---|
+| Preset picker | Shows the active preset name (or "None" if unsaved) |
+| **Save as Preset…** | Prompts for a name and saves the current parameter state |
+| **Delete** | Removes the selected user preset |
+
+Factory presets built into the plugin appear at the top of the picker; your saved presets appear below them.
+
+**In the plugin floating window:**
+
+A **Preset:** bar at the bottom of the plugin window mirrors the Settings picker. You can switch or save presets without leaving the window.
+
+**Auto-restore:** The last-used preset is saved automatically and reapplied the next time the plugin loads.
+
+**Dirty state:** If you adjust any parameter directly in the plugin window (e.g. drag an EQ band), the preset label resets to **None** to show the state no longer matches a saved preset.
+
 ### Setlist Toolbar Quick Access
 
 When a plugin is selected, a **puzzle piece button** appears in the Setlist toolbar next to the ReplayGain button. Click it to open the plugin window directly without navigating to Settings. The button is disabled when the plugin is turned off or bypassed.

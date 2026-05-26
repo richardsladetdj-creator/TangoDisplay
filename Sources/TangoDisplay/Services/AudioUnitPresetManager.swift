@@ -1,4 +1,3 @@
-import AudioToolbox
 import AVFoundation
 import Foundation
 import OSLog
@@ -10,7 +9,7 @@ import TangoDisplayCore
 ///   ~/Library/Application Support/TangoDisplay/AUPresets/{componentSubType}/
 ///
 /// Each user preset is a JSON file ({uuid}.aupreset) containing the preset name and
-/// the AU's ClassInfo property list encoded as base64.
+/// the AU's full state serialised as a base64-encoded binary property list.
 final class AudioUnitPresetManager {
 
     private let storeURL: URL
@@ -43,30 +42,31 @@ final class AudioUnitPresetManager {
         return urls
             .filter { $0.pathExtension == "aupreset" }
             .compactMap { url -> AudioUnitPreset? in
-                guard let data = try? Data(contentsOf: url),
-                      let envelope = try? JSONDecoder().decode(PresetEnvelope.self, from: data),
-                      let classInfoData = Data(base64Encoded: envelope.classInfo) else { return nil }
+                guard let fileData = try? Data(contentsOf: url),
+                      let envelope = try? JSONDecoder().decode(PresetEnvelope.self, from: fileData),
+                      let stateData = Data(base64Encoded: envelope.auState) else { return nil }
                 return AudioUnitPreset(
                     id: UUID(uuidString: envelope.id) ?? UUID(),
                     name: envelope.name,
-                    kind: .user(classInfoData: classInfoData)
+                    kind: .user(parameterData: stateData)
                 )
             }
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
 
     func savePreset(name: String, from avUnit: AVAudioUnit) throws -> AudioUnitPreset {
-        let classInfoData = try readClassInfo(from: avUnit)
+        guard let fullState = avUnit.auAudioUnit.fullState else {
+            throw AudioUnitPresetError.noState
+        }
+        let stateData = try PropertyListSerialization.data(
+            fromPropertyList: fullState, format: .binary, options: 0)
         let id = UUID()
-        let envelope = PresetEnvelope(
-            id: id.uuidString,
-            name: name,
-            classInfo: classInfoData.base64EncodedString()
-        )
+        let envelope = PresetEnvelope(id: id.uuidString, name: name,
+                                      auState: stateData.base64EncodedString())
         let fileData = try JSONEncoder().encode(envelope)
         let fileURL = storeURL.appendingPathComponent("\(id.uuidString).aupreset")
         try fileData.write(to: fileURL, options: .atomic)
-        return AudioUnitPreset(id: id, name: name, kind: .user(classInfoData: classInfoData))
+        return AudioUnitPreset(id: id, name: name, kind: .user(parameterData: stateData))
     }
 
     func deletePreset(_ preset: AudioUnitPreset) throws {
@@ -76,7 +76,8 @@ final class AudioUnitPresetManager {
 
     // MARK: - Apply
 
-    func applyPreset(_ preset: AudioUnitPreset, to avUnit: AVAudioUnit) throws {
+    func applyPreset(_ preset: AudioUnitPreset, to avUnit: AVAudioUnit,
+                     originator: AUParameterObserverToken? = nil) throws {
         switch preset.kind {
         case .factory(let number):
             let auPreset = AUAudioUnitPreset()
@@ -84,45 +85,13 @@ final class AudioUnitPresetManager {
             auPreset.name = preset.name
             avUnit.auAudioUnit.currentPreset = auPreset
 
-        case .user(let classInfoData):
-            let any = try PropertyListSerialization.propertyList(
-                from: classInfoData,
-                options: .mutableContainersAndLeaves,
-                format: nil
-            )
-            var cfPlist: CFPropertyList = any as AnyObject
-            let status = AudioUnitSetProperty(
-                avUnit.audioUnit,
-                kAudioUnitProperty_ClassInfo,
-                kAudioUnitScope_Global,
-                0,
-                &cfPlist,
-                UInt32(MemoryLayout<CFPropertyList>.size)
-            )
-            guard status == noErr else {
-                throw AudioUnitPresetError.setPropertyFailed(status)
+        case .user(let stateData):
+            guard let fullState = try PropertyListSerialization
+                .propertyList(from: stateData, format: nil) as? [String: Any] else {
+                throw AudioUnitPresetError.invalidState
             }
+            avUnit.auAudioUnit.fullState = fullState
         }
-    }
-
-    // MARK: - Private
-
-    private func readClassInfo(from avUnit: AVAudioUnit) throws -> Data {
-        // AudioUnitGetProperty returns a +1-retained CFPropertyList; use Unmanaged to handle ownership correctly.
-        var plistRef: Unmanaged<CFPropertyList>? = nil
-        var size = UInt32(MemoryLayout<Unmanaged<CFPropertyList>?>.size)
-        let status = AudioUnitGetProperty(
-            avUnit.audioUnit,
-            kAudioUnitProperty_ClassInfo,
-            kAudioUnitScope_Global,
-            0,
-            &plistRef,
-            &size
-        )
-        guard status == noErr, let plist = plistRef?.takeRetainedValue() else {
-            throw AudioUnitPresetError.getPropertyFailed(status)
-        }
-        return try PropertyListSerialization.data(fromPropertyList: plist, format: .binary, options: 0)
     }
 
     // MARK: - Types
@@ -130,18 +99,18 @@ final class AudioUnitPresetManager {
     private struct PresetEnvelope: Codable {
         let id: String
         let name: String
-        let classInfo: String
+        let auState: String   // base64-encoded binary plist of avUnit.auAudioUnit.fullState
     }
 }
 
 enum AudioUnitPresetError: LocalizedError {
-    case getPropertyFailed(OSStatus)
-    case setPropertyFailed(OSStatus)
+    case noState
+    case invalidState
 
     var errorDescription: String? {
         switch self {
-        case .getPropertyFailed(let s): return "Failed to read plugin state (OSStatus \(s))"
-        case .setPropertyFailed(let s): return "Failed to apply plugin state (OSStatus \(s))"
+        case .noState:    return "Plugin does not provide state for saving"
+        case .invalidState: return "Preset data could not be decoded"
         }
     }
 }

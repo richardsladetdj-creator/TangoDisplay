@@ -3,7 +3,7 @@ import Foundation
 public struct AudioUnitPreset: Identifiable, Equatable {
     public enum Kind: Equatable {
         case factory(number: Int)
-        case user(classInfoData: Data)
+        case user(parameterData: Data)
     }
 
     public let id: UUID

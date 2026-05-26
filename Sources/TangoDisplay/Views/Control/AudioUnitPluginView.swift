@@ -114,17 +114,8 @@ struct AudioUnitPluginSettingsSection: View {
                     .lineLimit(1)
             }
         } header: {
-            HStack(spacing: 6) {
-                Text("Audio Unit Plugin")
-                    .foregroundColor(ControlTheme.accent)
-                Text("BETA")
-                    .font(.system(size: 10))
-                    .foregroundColor(ControlTheme.accent)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(ControlTheme.accent.opacity(0.15))
-                    .clipShape(Capsule())
-            }
+            Text("Audio Unit Plugin")
+                .foregroundColor(ControlTheme.accent)
         } footer: {
             Text("Advanced feature — test your plugin before using it live. If loading fails, Setlist continues without it.")
                 .font(.caption)

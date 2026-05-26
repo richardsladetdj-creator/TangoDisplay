@@ -7,6 +7,7 @@ import TangoDisplayCore
 final class PluginWindowViewController: NSViewController {
     private let pluginVC: NSViewController
     private let player: LocalPlayerSource
+    private var sizeObservation: NSKeyValueObservation?
 
     init(pluginVC: NSViewController, player: LocalPlayerSource) {
         self.pluginVC = pluginVC
@@ -25,6 +26,11 @@ final class PluginWindowViewController: NSViewController {
 
         addChild(pluginVC)
         view.addSubview(pluginVC.view)
+
+        // Legacy V2 AU views carry their natural size in frame before TAMC is cleared.
+        // Capture it now so we can set preferredContentSize synchronously below.
+        let naturalPluginSize = pluginVC.view.frame.size
+
         pluginVC.view.translatesAutoresizingMaskIntoConstraints = false
 
         let barVC = NSHostingController(rootView: PluginWindowPresetBar(player: player))
@@ -44,14 +50,30 @@ final class PluginWindowViewController: NSViewController {
             barVC.view.bottomAnchor.constraint(equalTo: view.bottomAnchor),
             barVC.view.heightAnchor.constraint(equalToConstant: barHeight),
         ])
+
+        // For V2 AUs (e.g. AUGraphicEQ): use the natural frame captured above.
+        if naturalPluginSize != .zero {
+            preferredContentSize = NSSize(width: naturalPluginSize.width,
+                                          height: naturalPluginSize.height + barHeight)
+        }
+
+        // For V3 AUs that report size via preferredContentSize (possibly async):
+        // KVO fires with .initial immediately and then again whenever the size changes.
+        // NSWindow does not auto-resize after creation, so we also call setContentSize.
+        sizeObservation = pluginVC.observe(\.preferredContentSize, options: [.initial, .new]) { [weak self] vc, _ in
+            guard let self else { return }
+            let sz = vc.preferredContentSize
+            guard sz != .zero else { return }
+            let newSize = NSSize(width: sz.width, height: sz.height + 44)
+            self.preferredContentSize = newSize
+            DispatchQueue.main.async { [weak self] in
+                self?.view.window?.setContentSize(newSize)
+            }
+        }
     }
 
     override var preferredContentSize: NSSize {
-        get {
-            let inner = pluginVC.preferredContentSize
-            guard inner != .zero else { return .zero }
-            return NSSize(width: inner.width, height: inner.height + 44)
-        }
+        get { super.preferredContentSize }
         set { super.preferredContentSize = newValue }
     }
 }
