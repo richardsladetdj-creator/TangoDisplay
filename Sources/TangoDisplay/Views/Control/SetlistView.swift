@@ -158,7 +158,7 @@ struct SetlistView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(isDragTargeted ? ControlTheme.accent.opacity(0.08) : Color.clear)
         .animation(.easeInOut(duration: 0.15), value: isDragTargeted)
-        .onDrop(of: [.fileURL], isTargeted: $isDragTargeted) { providers in
+        .onDrop(of: [.fileURL, .audio], isTargeted: $isDragTargeted) { providers in
             Task {
                 let urls = await loadURLs(from: providers)
                 handleIncomingURLs(urls, anchorID: nil)
@@ -277,7 +277,7 @@ struct SetlistView: View {
                 let ids = Set(offsets.compactMap { setlist.entries[safe: $0]?.id })
                 pendingDeleteIDs = ids
             }
-            .onInsert(of: [.fileURL]) { offset, providers in
+            .onInsert(of: [.fileURL, .audio]) { offset, providers in
                 // Convert the integer offset to a stable UUID anchor immediately,
                 // before any async work — the list may mutate during URL/metadata loading.
                 let anchorID: UUID? = offset < setlist.entries.count
@@ -554,7 +554,16 @@ struct SetlistView: View {
     private func loadURLs(from providers: [NSItemProvider]) async -> [URL] {
         var urls: [URL] = []
         for provider in providers {
-            guard provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) else { continue }
+            if let url = await resolveFileURL(from: provider) {
+                urls.append(url)
+            }
+        }
+        return urls
+    }
+
+    private func resolveFileURL(from provider: NSItemProvider) async -> URL? {
+        // Standard path: works for Desktop, external volumes, most Finder drags.
+        if provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
             let url: URL? = await withCheckedContinuation { continuation in
                 provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
                     if let url = item as? URL {
@@ -569,11 +578,23 @@ struct SetlistView: View {
                     }
                 }
             }
-            if let url, url.isFileURL {
-                urls.append(url)
-            }
+            if let url, url.isFileURL { return url }
         }
-        return urls
+
+        // Fallback: Apple Music purchases after ~July 2022 stored in Media.localized
+        // are offered by Finder as public.audio rather than public.file-url on Sequoia.
+        // openInPlace:true returns the original on-disk URL for non-sandboxed apps.
+        if provider.hasItemConformingToTypeIdentifier(UTType.audio.identifier) {
+            let url: URL? = await withCheckedContinuation { continuation in
+                provider.loadFileRepresentation(for: UTType.audio,
+                                                openInPlace: true) { url, _, _ in
+                    continuation.resume(returning: url)
+                }
+            }
+            if let url, url.isFileURL { return url }
+        }
+
+        return nil
     }
 
     private var dropHint: some View {
