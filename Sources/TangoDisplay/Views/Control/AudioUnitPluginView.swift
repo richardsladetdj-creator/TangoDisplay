@@ -55,37 +55,38 @@ struct AudioUnitPluginSettingsSection: View {
                 .disabled(settings.selectedAudioUnitPlugin == nil)
             }
 
-            if player.audioUnitPluginStatus.isActive && !player.availablePresets.isEmpty {
-                let factoryPresets = player.availablePresets.filter(\.isFactory)
-                let userPresets = player.availablePresets.filter(\.isUser)
-
+            if player.audioUnitPluginStatus.isActive {
                 LabeledContent("Preset") {
                     HStack {
-                        Menu {
-                            if !factoryPresets.isEmpty {
-                                Section("Factory") {
-                                    ForEach(factoryPresets) { p in
-                                        Button(p.name) { player.applyPreset(p) }
+                        if !player.availablePresets.isEmpty {
+                            let factoryPresets = player.availablePresets.filter(\.isFactory)
+                            let userPresets = player.availablePresets.filter(\.isUser)
+                            Menu {
+                                if !factoryPresets.isEmpty {
+                                    Section("Factory") {
+                                        ForEach(factoryPresets) { p in
+                                            Button(p.name) { player.applyPreset(p) }
+                                        }
                                     }
                                 }
-                            }
-                            if !userPresets.isEmpty {
-                                Section("Saved") {
+                                if !userPresets.isEmpty {
+                                    Section("Saved") {
+                                        ForEach(userPresets) { p in
+                                            Button(p.name) { player.applyPreset(p) }
+                                        }
+                                    }
+                                    Divider()
                                     ForEach(userPresets) { p in
-                                        Button(p.name) { player.applyPreset(p) }
+                                        Button("Delete \"\(p.name)\"", role: .destructive) {
+                                            try? player.deletePreset(p)
+                                        }
                                     }
                                 }
-                                Divider()
-                                ForEach(userPresets) { p in
-                                    Button("Delete \"\(p.name)\"", role: .destructive) {
-                                        try? player.deletePreset(p)
-                                    }
-                                }
+                            } label: {
+                                Text(activePresetLabel)
+                                    .foregroundColor(.secondary)
+                                    .lineLimit(1)
                             }
-                        } label: {
-                            Text(activePresetLabel)
-                                .foregroundColor(.secondary)
-                                .lineLimit(1)
                         }
                         Spacer()
                         Button("Save as Preset…") {
