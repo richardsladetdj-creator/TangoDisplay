@@ -1,4 +1,5 @@
 import AppKit
+import iTunesLibrary
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
 
@@ -12,6 +13,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         appState.profileStore.load()
         appState.start()
         hotkeyService.register(appState: appState)
+        requestMediaLibraryAccess()
+    }
+
+    // Triggers the macOS Media Library permission prompt on first launch.
+    // Required so that drags of iTunes-purchased tracks from Music.app are
+    // allowed by TCC; without this the cross-process drag is silently gated
+    // until something else (e.g. a SwiftUI .onDrop call) probes the library.
+    // Constructing ITLibrary is the documented way to request this access on
+    // macOS. The instance itself is discarded; we only care about the prompt.
+    private func requestMediaLibraryAccess() {
+        _ = try? ITLibrary(apiVersion: "1.1")
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {

@@ -68,7 +68,7 @@ cat > "$CONTENTS/Info.plist" <<EOF
   <key>CFBundleIconFile</key>
   <string>icon</string>
   <key>CFBundleVersion</key>
-  <string>72</string>
+  <string>73</string>
   <key>CFBundleShortVersionString</key>
   <string>3.21.4</string>
   <key>CFBundlePackageType</key>
@@ -80,6 +80,9 @@ cat > "$CONTENTS/Info.plist" <<EOF
   <!-- Required for reading track data via AppleScript (Music.app, Embrace) -->
   <key>NSAppleEventsUsageDescription</key>
   <string>TangoDisplay reads the currently playing track from Music.app, Swinsian, or Embrace to show it on the dancer display.</string>
+  <!-- Required for receiving drags of iTunes-purchased tracks from Music.app -->
+  <key>NSAppleMusicUsageDescription</key>
+  <string>TangoDisplay needs access to your Apple Music library so tracks dragged from Music.app can be added to your setlist.</string>
   <!-- Required for global hotkeys (⌘⇧O/P/R) -->
   <key>NSInputMonitoringUsageDescription</key>
   <string>TangoDisplay uses global keyboard shortcuts so you can trigger overrides and pauses without switching windows.</string>

@@ -1,7 +1,10 @@
 import AppKit
+import os.log
 import SwiftUI
 import TangoDisplayCore
 import UniformTypeIdentifiers
+
+private let dropLog = OSLog(subsystem: "com.tangodisplay", category: "musicdrop")
 
 private extension Array {
     subscript(safe index: Int) -> Element? {
@@ -12,72 +15,282 @@ private extension Array {
 // MARK: - AppKit Music.app drop handler
 //
 // SwiftUI's .onDrop only sees types bridged through NSItemProvider. Music.app puts
-// com.apple.itunes.drag directly on the NSPasteboard without bridging it, so the drop
-// zone never highlights for newer purchases. This AppKit layer has direct NSPasteboard
-// access and intercepts only Music.app drags; all other types fall through to SwiftUI.
+// com.apple.itunes.drag / com.apple.music.metadata directly on NSPasteboard without
+// bridging them through NSItemProvider.
+//
+// Architecture: MusicAppDropView is installed as an intermediate parent between
+// window.contentView and its existing subviews. AppKit drag routing walks UP the
+// superview chain from the hit-tested view; so any drag over SwiftUI content
+// reaches MusicAppDropView via its ancestor relationship. Non-Music.app drags
+// return [] from draggingEntered and fall through to SwiftUI's own handlers.
 
 private class MusicAppDropView: NSView {
     var onDrop: ([URL]) -> Void = { _ in }
     var onTargeted: (Bool) -> Void = { _ in }
 
+    // Legacy Music.app drag types (pre-Sequoia / older purchased AAC):
     private static let pasteboardType     = NSPasteboard.PasteboardType("com.apple.itunes.drag")
     private static let musicMetadataType  = NSPasteboard.PasteboardType("com.apple.music.metadata")
+    // Music.app on Sequoia for iTunes-purchased AAC: file promise + Music identifier
+    private static let musicJRFSType      = NSPasteboard.PasteboardType("com.apple.Music.JRFS")
+    // Legacy file-promise pasteboard types (Music.app's actual mechanism on Sequoia).
+    // NSFilePromiseReceiver does NOT match these — must use the older
+    // namesOfPromisedFiles(droppedAtDestination:) API.
+    private static let legacyPromiseURLType      = NSPasteboard.PasteboardType("com.apple.pasteboard.promised-file-url")
+    private static let legacyPromiseContentsType = NSPasteboard.PasteboardType("NSPromiseContentsPboardType")
+    // Plain file URLs from Finder, Swinsian, or AIFF-from-Music drags.
+    private static let fileURLType               = NSPasteboard.PasteboardType.fileURL
+
+    private let promiseQueue: OperationQueue = {
+        let q = OperationQueue()
+        q.qualityOfService = .userInitiated
+        return q
+    }()
 
     override init(frame: NSRect) {
         super.init(frame: frame)
-        registerForDraggedTypes([Self.pasteboardType, Self.musicMetadataType])
     }
     required init?(coder: NSCoder) { fatalError() }
 
-    private func hasMusicDrag(_ sender: NSDraggingInfo) -> Bool {
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window != nil {
+            var types: [NSPasteboard.PasteboardType] = [
+                Self.pasteboardType, Self.musicMetadataType, Self.musicJRFSType,
+                Self.legacyPromiseURLType, Self.legacyPromiseContentsType,
+                Self.fileURLType
+            ]
+            // Also include NSFilePromiseReceiver types so future Music.app versions
+            // that adopt the modern API are still handled. We filter non-Music promise
+            // drags in hasAcceptableDrag().
+            types.append(contentsOf: NSFilePromiseReceiver.readableDraggedTypes
+                .map { NSPasteboard.PasteboardType($0) })
+            registerForDraggedTypes(types)
+            os_log("register types=%{public}@ frame=%{public}@ subviews=%d isContentView=%{public}@",
+                   log: dropLog, type: .info,
+                   String(describing: registeredDraggedTypes),
+                   String(describing: frame),
+                   subviews.count,
+                   String(window?.contentView === self))
+        } else {
+            unregisterDraggedTypes()
+        }
+    }
+
+    private func hasAcceptableDrag(_ sender: NSDraggingInfo) -> Bool {
         let types = sender.draggingPasteboard.types ?? []
-        return types.contains(Self.pasteboardType) || types.contains(Self.musicMetadataType)
+        let match = types.contains(Self.pasteboardType)
+            || types.contains(Self.musicMetadataType)
+            || types.contains(Self.musicJRFSType)
+            || types.contains(Self.legacyPromiseURLType)
+            || types.contains(Self.fileURLType)
+        if !match {
+            os_log("reject: no acceptable type; types=%{public}@", log: dropLog, type: .info,
+                   String(describing: types))
+        }
+        return match
     }
 
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
-        guard hasMusicDrag(sender) else { return [] }
+        os_log("draggingEntered types=%{public}@", log: dropLog, type: .info,
+               String(describing: sender.draggingPasteboard.types ?? []))
+        guard hasAcceptableDrag(sender) else { return [] }
         onTargeted(true)
         return .copy
     }
     override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
-        guard hasMusicDrag(sender) else { return [] }
+        guard hasAcceptableDrag(sender) else { return [] }
         return .copy
     }
     override func draggingExited(_ sender: NSDraggingInfo?) { onTargeted(false) }
     override func draggingEnded(_ sender: NSDraggingInfo) { onTargeted(false) }
-    override func prepareForDragOperation(_ sender: NSDraggingInfo) -> Bool { hasMusicDrag(sender) }
+    override func prepareForDragOperation(_ sender: NSDraggingInfo) -> Bool { hasAcceptableDrag(sender) }
 
     override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
         onTargeted(false)
         let pasteboard = sender.draggingPasteboard
-        let urls: [URL]
-        if pasteboard.types?.contains(Self.musicMetadataType) == true {
-            urls = resolveViaMusicMetadata(pasteboard)
-        } else {
-            urls = resolveViaMusicSelection()
+        let types = pasteboard.types ?? []
+        os_log("performDrag types=%{public}@", log: dropLog, type: .info,
+               String(describing: types))
+
+        // 1. Modern NSFilePromiseReceiver — for future Music.app versions.
+        if let promises = pasteboard.readObjects(forClasses: [NSFilePromiseReceiver.self],
+                                                  options: nil) as? [NSFilePromiseReceiver],
+           !promises.isEmpty
+        {
+            return acceptFilePromises(promises)
         }
-        guard !urls.isEmpty else { return false }
-        onDrop(urls)
+
+        // 2. Legacy file-promise — Music.app on Sequoia for iTunes-purchased AAC.
+        if types.contains(Self.legacyPromiseURLType)
+            || types.contains(Self.legacyPromiseContentsType)
+        {
+            return acceptLegacyFilePromise(sender)
+        }
+
+        // 3. Legacy plist path — pre-Sequoia purchased AAC.
+        if types.contains(Self.musicMetadataType) {
+            let urls = resolveViaMusicMetadata(pasteboard)
+            if !urls.isEmpty { onDrop(urls); return true }
+        }
+
+        // 4. Plain file URL — Finder, Swinsian, AIFF-from-Music drags.
+        if types.contains(Self.fileURLType) {
+            let pbURLs = pasteboard.readObjects(forClasses: [NSURL.self],
+                                                 options: [.urlReadingFileURLsOnly: true]) as? [URL]
+            if let pbURLs = pbURLs, !pbURLs.isEmpty {
+                os_log("file-url path resolved %d url(s)", log: dropLog, type: .info, pbURLs.count)
+                onDrop(pbURLs)
+                return true
+            }
+        }
+
+        // 5. AppleScript selection fallback — com.apple.itunes.drag only.
+        // Synchronous and slow (Music.app library query) — kept as a last resort.
+        if types.contains(Self.pasteboardType) {
+            let urls = resolveViaMusicSelection()
+            if !urls.isEmpty { onDrop(urls); return true }
+        }
+
+        os_log("performDrag resolved zero urls", log: dropLog, type: .error)
+        return false
+    }
+
+    // Legacy file-promise path. Music.app on Sequoia uses
+    // com.apple.pasteboard.promised-file-url, which predates NSFilePromiseReceiver.
+    // We dispatch the synchronous namesOfPromisedFiles call off the main thread so
+    // the UI stays responsive while Music.app writes the file. The returned URLs
+    // are delivered via onDrop on main.
+    // Music.app on Sequoia stores the real file URL as a plain string under the
+    // promised-file-url flavor. For locally-cached tracks (purchased downloads, iTunes
+    // Match present-on-disk) we read that URL directly — no copy needed. For tracks
+    // that aren't on disk (pure iCloud), the URL won't resolve, so we fall back to
+    // namesOfPromisedFilesDropped which asks Music.app to materialise the file in our
+    // app-support cache.
+    private func acceptLegacyFilePromise(_ sender: NSDraggingInfo) -> Bool {
+        let pb = sender.draggingPasteboard
+
+        var urls: [URL] = []
+        for item in pb.pasteboardItems ?? [] {
+            guard let str = item.string(forType: Self.legacyPromiseURLType),
+                  let url = URL(string: str),
+                  url.isFileURL,
+                  FileManager.default.fileExists(atPath: url.path)
+            else { continue }
+            urls.append(url)
+        }
+        if !urls.isEmpty {
+            os_log("promise resolved %d url(s) from pasteboard string",
+                   log: dropLog, type: .info, urls.count)
+            onDrop(urls)
+            return true
+        }
+
+        // Track is not on disk — ask Music.app to materialise it via the legacy
+        // file-promise mechanism. Blocking but only hit for cloud-only tracks.
+        let destDir = Self.filePromiseDestination()
+        let names = sender.namesOfPromisedFilesDropped(atDestination: destDir) ?? []
+        let writtenURLs = names.map { destDir.appendingPathComponent($0) }
+        os_log("promise materialised %d file(s) at %{public}@",
+               log: dropLog, type: .info, names.count, destDir.path)
+        guard !writtenURLs.isEmpty else { return false }
+        onDrop(writtenURLs)
         return true
     }
 
+    // Accept one or more NSFilePromiseReceiver promises, writing the files to a
+    // persistent cache directory inside Application Support. Calls onDrop once all
+    // promises have either resolved or failed. Returns true synchronously so the
+    // drag UI completes immediately; the resulting URLs land asynchronously.
+    private func acceptFilePromises(_ promises: [NSFilePromiseReceiver]) -> Bool {
+        let destDir = Self.filePromiseDestination()
+        os_log("accepting %d file promise(s) to %{public}@",
+               log: dropLog, type: .info, promises.count, destDir.path)
+        let lock = NSLock()
+        var receivedURLs: [URL] = []
+        let group = DispatchGroup()
+        for promise in promises {
+            group.enter()
+            promise.receivePromisedFiles(atDestination: destDir,
+                                          options: [:],
+                                          operationQueue: promiseQueue) { url, error in
+                if let error = error {
+                    os_log("file promise error: %{public}@", log: dropLog, type: .error,
+                           String(describing: error))
+                } else {
+                    os_log("received promised file: %{public}@", log: dropLog, type: .info, url.path)
+                    lock.lock(); receivedURLs.append(url); lock.unlock()
+                }
+                group.leave()
+            }
+        }
+        group.notify(queue: .main) { [weak self] in
+            guard let self = self else { return }
+            if receivedURLs.isEmpty {
+                os_log("file promises yielded zero urls", log: dropLog, type: .error)
+            } else {
+                self.onDrop(receivedURLs)
+            }
+        }
+        return true
+    }
+
+    private static func filePromiseDestination() -> URL {
+        let base = FileManager.default.urls(for: .applicationSupportDirectory,
+                                            in: .userDomainMask).first
+            ?? FileManager.default.temporaryDirectory
+        let dir = base.appendingPathComponent("TangoDisplay/MusicAppDrops", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }
+
     // Music.app puts com.apple.music.metadata on the drag pasteboard for post-2022
-    // purchased AAC tracks instead of providing a file URL. The plist contains track
-    // dicts keyed by track-ID strings, each with a "Location" field (~ prefix).
+    // purchased AAC tracks. Two known plist structures (varies by Music.app version):
+    //   Newer: {"Tracks": {"12345": {"Location": "…"}}, "Playlists": […]}
+    //   Older: {"12345": {"Location": "…"}, "Playlist Items": […]}
+    // Location is either a "~/…" tilde path or a "file://…" URL (Embrace handles both).
+    // Falls back to reading public.file-url directly if the plist yields nothing.
     private func resolveViaMusicMetadata(_ pasteboard: NSPasteboard) -> [URL] {
         var urls: [URL] = []
         for item in pasteboard.pasteboardItems ?? [] {
             guard let plist = item.propertyList(forType: Self.musicMetadataType) as? [String: Any]
-            else { continue }
-            for (_, value) in plist {
+            else {
+                os_log("plist cast failed for pasteboard item", log: dropLog, type: .error)
+                continue
+            }
+            // Use the "Tracks" sub-dict if present (newer format), otherwise the root
+            let trackSource = (plist["Tracks"] as? [String: Any]) ?? plist
+            os_log("plist keys=%{public}@ trackSource keys=%{public}@",
+                   log: dropLog, type: .info,
+                   String(describing: Array(plist.keys)),
+                   String(describing: Array(trackSource.keys)))
+            for (_, value) in trackSource {
                 guard let track = value as? [String: Any],
-                      let location = track["Location"] as? String,
+                      var location = track["Location"] as? String,
                       !location.isEmpty else { continue }
+                let raw = location
+                if location.hasPrefix("file:") {
+                    location = URL(string: location)?.path ?? location
+                }
                 let path = NSString(string: location).expandingTildeInPath
                 let url = URL(fileURLWithPath: path)
+                let exists = FileManager.default.fileExists(atPath: url.path)
+                os_log("track loc=%{public}@ → url=%{public}@ exists=%{public}@",
+                       log: dropLog, type: .info, raw, url.path, String(exists))
                 if url.isFileURL { urls.append(url) }
             }
         }
+        os_log("resolveViaMusicMetadata produced %d urls", log: dropLog, type: .info, urls.count)
+        if !urls.isEmpty { return urls }
+
+        // Fallback: Music.app may also offer a direct public.file-url on the same item
+        for item in pasteboard.pasteboardItems ?? [] {
+            if let str = item.string(forType: .fileURL),
+               let url = URL(string: str) {
+                urls.append(url.standardized)
+            }
+        }
+        os_log("fallback file-url produced %d urls", log: dropLog, type: .info, urls.count)
         return urls
     }
 
@@ -110,20 +323,107 @@ private class MusicAppDropView: NSView {
     }
 }
 
-private struct MusicAppDropOverlay: NSViewRepresentable {
+// Replaces the NSWindow's contentView with MusicAppDropView, re-parenting the
+// original contentView (typically SwiftUI's NSHostingView) underneath. Owning
+// contentView outright — rather than wrapping its subviews — survives any
+// SwiftUI rebuild that re-asserts the hosting hierarchy and guarantees the
+// drop view is always in AppKit's drag routing path.
+//
+// Type registration on MusicAppDropView is intentionally limited to
+// com.apple.music.metadata and com.apple.itunes.drag, so AppKit's drag walk-up
+// only stops here for Music.app drags. Drags carrying public.file-url (Finder,
+// Swinsian, AIFF from Music) flow past us to SwiftUI's .onDrop handler as today.
+private struct MusicAppWindowDropInstaller: NSViewRepresentable {
     @Binding var isTargeted: Bool
     let onDrop: ([URL]) -> Void
 
-    func makeNSView(context: Context) -> MusicAppDropView {
-        let view = MusicAppDropView()
-        configure(view)
-        return view
-    }
-    func updateNSView(_ nsView: MusicAppDropView, context: Context) { configure(nsView) }
+    func makeNSView(context: Context) -> InstallerSentinel { InstallerSentinel() }
 
-    private func configure(_ view: MusicAppDropView) {
-        view.onTargeted = { targeted in DispatchQueue.main.async { isTargeted = targeted } }
-        view.onDrop = onDrop
+    func updateNSView(_ nsView: InstallerSentinel, context: Context) {
+        nsView.update(isTargetedBinding: $isTargeted, onDrop: onDrop)
+    }
+
+    class InstallerSentinel: NSView {
+        private weak var dropView: MusicAppDropView?
+        private var pendingBinding: Binding<Bool>?
+        private var pendingDrop: (([URL]) -> Void)?
+        private var contentViewObserver: NSKeyValueObservation?
+
+        override init(frame frameRect: NSRect) {
+            super.init(frame: frameRect)
+        }
+        required init?(coder: NSCoder) { fatalError() }
+
+        deinit {
+            contentViewObserver?.invalidate()
+        }
+
+        func update(isTargetedBinding: Binding<Bool>, onDrop: @escaping ([URL]) -> Void) {
+            pendingBinding = isTargetedBinding
+            pendingDrop    = onDrop
+            if let dv = dropView {
+                configure(dv, binding: isTargetedBinding, onDrop: onDrop)
+            } else if window != nil {
+                install()
+            }
+        }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            guard window != nil, dropView == nil else { return }
+            install()
+        }
+
+        private func install() {
+            guard let window = self.window,
+                  let binding = pendingBinding,
+                  let drop = pendingDrop else { return }
+
+            // Already installed?
+            if let dv = window.contentView as? MusicAppDropView {
+                configure(dv, binding: binding, onDrop: drop)
+                dropView = dv
+                observeContentView(on: window)
+                return
+            }
+
+            let oldContent = window.contentView
+            let dv = MusicAppDropView(frame: oldContent?.frame ?? window.contentLayoutRect)
+            dv.autoresizingMask = [.width, .height]
+            window.contentView = dv
+            if let oldContent = oldContent {
+                oldContent.translatesAutoresizingMaskIntoConstraints = true
+                oldContent.frame = dv.bounds
+                oldContent.autoresizingMask = [.width, .height]
+                dv.addSubview(oldContent)
+            }
+            os_log("replaced contentView; previousContent=%{public}@ newFrame=%{public}@",
+                   log: dropLog, type: .info,
+                   String(describing: oldContent.map { type(of: $0) } ?? NSObject.self),
+                   String(describing: dv.frame))
+            configure(dv, binding: binding, onDrop: drop)
+            dropView = dv
+            observeContentView(on: window)
+        }
+
+        private func observeContentView(on window: NSWindow) {
+            contentViewObserver?.invalidate()
+            contentViewObserver = window.observe(\.contentView, options: [.new]) { [weak self] win, _ in
+                guard let self = self else { return }
+                if !(win.contentView is MusicAppDropView) {
+                    os_log("contentView reset detected — re-installing", log: dropLog, type: .error)
+                    self.dropView = nil
+                    self.install()
+                }
+            }
+        }
+
+        private func configure(_ dv: MusicAppDropView,
+                                binding: Binding<Bool>,
+                                onDrop: @escaping ([URL]) -> Void) {
+            dv.onTargeted = { t in DispatchQueue.main.async { binding.wrappedValue = t } }
+            dv.onDrop = onDrop
+        }
     }
 }
 
@@ -233,6 +533,11 @@ struct SetlistView: View {
         .onDisappear {
             if let m = pasteMonitor { NSEvent.removeMonitor(m); pasteMonitor = nil }
         }
+        .background(
+            MusicAppWindowDropInstaller(isTargeted: $isDragTargeted) { urls in
+                handleIncomingURLs(urls, anchorID: nil)
+            }
+        )
         .onReceive(player.$currentEntryID) { activeEntryID = $0 }
         .onReceive(player.$isActivePlaying) { isPlayerActive = $0 }
         .onReceive(player.$hogModeConflict) { hogConflictWarning = $0 }
@@ -276,18 +581,10 @@ struct SetlistView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(isDragTargeted ? ControlTheme.accent.opacity(0.08) : Color.clear)
         .animation(.easeInOut(duration: 0.15), value: isDragTargeted)
-        .onDrop(of: [.fileURL, .audio], isTargeted: $isDragTargeted) { providers in
-            Task {
-                let urls = await loadURLs(from: providers)
-                handleIncomingURLs(urls, anchorID: nil)
-            }
-            return true
-        }
-        .overlay {
-            MusicAppDropOverlay(isTargeted: $isDragTargeted) { urls in
-                handleIncomingURLs(urls, anchorID: nil)
-            }
-        }
+        // No SwiftUI .onDrop: SwiftUI's NSHostingView registration for the drop
+        // type intercepts Music.app's promise-based drag before AppKit's walk-up
+        // reaches MusicAppDropView. The window-level MusicAppDropView handles
+        // public.file-url, Music.app drags, and visual targeting in this state.
     }
 
     // MARK: - Drop handling
@@ -400,7 +697,7 @@ struct SetlistView: View {
                 let ids = Set(offsets.compactMap { setlist.entries[safe: $0]?.id })
                 pendingDeleteIDs = ids
             }
-            .onInsert(of: [.fileURL, .audio]) { offset, providers in
+            .onInsert(of: [.fileURL]) { offset, providers in
                 // Convert the integer offset to a stable UUID anchor immediately,
                 // before any async work — the list may mutate during URL/metadata loading.
                 let anchorID: UUID? = offset < setlist.entries.count
@@ -415,11 +712,6 @@ struct SetlistView: View {
         .listStyle(.plain)
         .overlay(alignment: .bottom) {
             dropHint
-        }
-        .overlay {
-            MusicAppDropOverlay(isTargeted: $isDragTargeted) { urls in
-                handleIncomingURLs(urls, anchorID: nil)
-            }
         }
         .toolbar {
             ToolbarItem(placement: .automatic) {
