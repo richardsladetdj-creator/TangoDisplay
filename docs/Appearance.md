@@ -42,7 +42,7 @@ Control the vertical order in which text items appear on the dancer display. The
 
 Use the **↑** and **↓** chevron buttons on the right of each row to move items up or down. Changes take effect on the dancer display immediately.
 
-**Dance Tracks** items: Genre, Artist, Year, Title, Singer, Last Tanda Label
+**Dance Tracks** items: Genre, Artist, Year, Title, Singer, Last Tanda Label, Track Counter (only visible in the list when the Track Counter position is set to "Centred (in text order)" in Display Settings)
 
 **Cortinas — Cortina Track** items: Cortina Label, Cortina Artist, Cortina Title (default order: label first, then artist, then title). Only visible when **Show cortina track during cortina** is enabled in the Cortina tab.
 

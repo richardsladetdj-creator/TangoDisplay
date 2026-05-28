@@ -2,6 +2,7 @@ import SwiftUI
 import TangoDisplayCore
 
 struct AppearanceVisibilityTab: View {
+    @EnvironmentObject var settings: AppSettings
     @Binding var working: AppearanceProfile
     @Binding var danceDragItem: DisplayTextItem?
     @Binding var cortinaTrackDragItem: DisplayTextItem?
@@ -41,7 +42,8 @@ struct AppearanceVisibilityTab: View {
             }
 
             Section {
-                orderRows(items: $working.danceItemOrder, dragItem: $danceDragItem)
+                orderRows(items: $working.danceItemOrder, dragItem: $danceDragItem,
+                          filter: { $0 != .trackCounter || settings.trackCounterPosition == .centre })
             } header: {
                 orderHeader("Dance Tracks")
             }
@@ -84,10 +86,14 @@ struct AppearanceVisibilityTab: View {
     }
 
     @ViewBuilder
-    private func orderRows(items: Binding<[DisplayTextItem]>, dragItem: Binding<DisplayTextItem?>) -> some View {
+    private func orderRows(items: Binding<[DisplayTextItem]>, dragItem: Binding<DisplayTextItem?>,
+                           filter: ((DisplayTextItem) -> Bool)? = nil) -> some View {
+        let visibleIndices = items.wrappedValue.indices.filter { filter?(items.wrappedValue[$0]) ?? true }
         VStack(spacing: 0) {
-            ForEach(items.wrappedValue.indices, id: \.self) { index in
-                if index > 0 { Divider() }
+            ForEach(visibleIndices, id: \.self) { index in
+                let isFirstVisible = index == visibleIndices.first
+                let isLastVisible  = index == visibleIndices.last
+                if !isFirstVisible { Divider() }
                 HStack {
                     Image(systemName: "line.3.horizontal")
                         .foregroundColor(.secondary)
@@ -100,14 +106,14 @@ struct AppearanceVisibilityTab: View {
                         Image(systemName: "chevron.up")
                     }
                     .buttonStyle(.borderless)
-                    .disabled(index == 0)
+                    .disabled(isFirstVisible)
                     Button {
                         items.wrappedValue.swapAt(index, index + 1)
                     } label: {
                         Image(systemName: "chevron.down")
                     }
                     .buttonStyle(.borderless)
-                    .disabled(index == items.wrappedValue.count - 1)
+                    .disabled(isLastVisible)
                 }
                 .padding(.vertical, 8)
                 .onDrag {

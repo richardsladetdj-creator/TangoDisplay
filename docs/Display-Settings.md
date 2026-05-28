@@ -23,7 +23,8 @@ The **Display** tab controls which monitor receives the dancer display, fullscre
 | Option | Description |
 |---|---|
 | **Mirror mode** | When on, the control window shows a live preview of what is on the dancer display. Turn off to save CPU if you don't need the preview. |
-| **Show track counter (Track X of X)** | Controls whether the "Track X of X" position indicator appears in the corner of the dancer display. |
+| **Show track counter (Track X of X)** | Controls whether the "Track X of X" position indicator appears on the dancer display. |
+| **Position** | Where the track counter appears: **Top left**, **Top right**, **Bottom left**, **Bottom right** (default), or **Centred (in text order)**. Disabled when Show track counter is off. When set to "Centred (in text order)", the counter renders as part of the text stack and its position within that stack can be adjusted via Appearance > Visibility > Text Order for Dance Tracks. |
 
 ---
 

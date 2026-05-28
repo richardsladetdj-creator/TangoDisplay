@@ -209,6 +209,9 @@ final class AppSettings: ObservableObject {
     @Published var showTrackCounter: Bool {
         didSet { UserDefaults.standard.set(showTrackCounter, forKey: kPrefix + "showTrackCounter") }
     }
+    @Published var trackCounterPosition: TrackCounterPosition {
+        didSet { UserDefaults.standard.set(trackCounterPosition.rawValue, forKey: kPrefix + "trackCounterPosition") }
+    }
 
     // MARK: - Track info transformations
 
@@ -333,6 +336,8 @@ final class AppSettings: ObservableObject {
         }
         mirrorMode = ud.object(forKey: kPrefix + "mirrorMode").flatMap { $0 as? Bool } ?? true
         showTrackCounter = ud.object(forKey: kPrefix + "showTrackCounter").flatMap { $0 as? Bool } ?? true
+        let rawPos = ud.string(forKey: kPrefix + "trackCounterPosition") ?? ""
+        trackCounterPosition = TrackCounterPosition(rawValue: rawPos) ?? .bottomRight
         if let data = ud.data(forKey: kPrefix + "trackTransforms") {
             if let rules = try? JSONDecoder().decode([String: TransformRule].self, from: data) {
                 trackTransforms = rules

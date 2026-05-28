@@ -196,7 +196,7 @@ public struct AppearanceProfile: Codable, Identifiable, Equatable {
                 albumArtworkScale: Double = 1.0,
                 albumArtworkOffsetX: Double = 0.0,
                 albumArtworkOffsetY: Double = 0.0,
-                danceItemOrder: [DisplayTextItem] = [.genre, .artist, .year, .title, .singer, .lastTandaLabel],
+                danceItemOrder: [DisplayTextItem] = [.genre, .artist, .year, .title, .singer, .lastTandaLabel, .trackCounter],
                 cortinaItemOrder: [DisplayTextItem] = [.genre, .artist, .year, .singer, .lastTandaLabel],
                 showSinger: Bool = false,
                 singerSource: SingerSource = .comments,
@@ -507,9 +507,12 @@ public struct AppearanceProfile: Codable, Identifiable, Equatable {
         overrideTextFontItalic = try c.decodeIfPresent(Bool.self,   forKey: .overrideTextFontItalic) ?? false
         overrideTextColor      = try c.decodeIfPresent(String.self, forKey: .overrideTextColor)      ?? titleColor
 
-        // Migration: append .lastTandaLabel to order lists if absent
+        // Migration: append items to order lists if absent
         if !danceItemOrder.contains(.lastTandaLabel) {
             danceItemOrder.append(.lastTandaLabel)
+        }
+        if !danceItemOrder.contains(.trackCounter) {
+            danceItemOrder.append(.trackCounter)
         }
         if !cortinaItemOrder.contains(.lastTandaLabel) {
             cortinaItemOrder.append(.lastTandaLabel)
@@ -573,6 +576,7 @@ public enum DisplayTextItem: String, Codable, CaseIterable {
     case cortinaTitle    // cortina track's own title
     case nextUpLabel     // "COMING UP" heading text
     case lastTandaLabel  // "LAST TANDA" announcement label
+    case trackCounter    // rendered inline when position == .centre
 
     public var displayName: String {
         switch self {
@@ -586,6 +590,7 @@ public enum DisplayTextItem: String, Codable, CaseIterable {
         case .cortinaTitle:    "Cortina Title"
         case .nextUpLabel:     "Next Up Label"
         case .lastTandaLabel:  "Last Tanda Label"
+        case .trackCounter:    "Track Counter"
         }
     }
 }

@@ -76,6 +76,16 @@ struct PlayingView: View {
                             .foregroundColor(profile.lastTandaLabelSwiftUIColor)
                             .multilineTextAlignment(.center)
                     }
+                case .trackCounter:
+                    if settings.showTrackCounter,
+                       settings.trackCounterPosition == .centre,
+                       let pos = state.tandaPosition {
+                        Text(pos.label)
+                            .font(profile.trackCounterFont)
+                            .foregroundColor(profile.trackCounterSwiftUIColor)
+                            .shadow(color: .black.opacity(0.6), radius: 4, x: 0, y: 1)
+                            .multilineTextAlignment(.center)
+                    }
                 case .cortinaLabel, .cortinaArtist, .cortinaTitle, .nextUpLabel:
                     EmptyView()
                 }

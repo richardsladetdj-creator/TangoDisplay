@@ -16,6 +16,11 @@ public struct TandaPosition: Equatable, Hashable {
         self.current = current
         self.total = total
     }
+
+    public var label: String {
+        if let total { return "Track \(current) of \(total)" }
+        return "Track \(current)"
+    }
 }
 
 public struct DisplayState: Equatable, Hashable {

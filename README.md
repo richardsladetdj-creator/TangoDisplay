@@ -49,7 +49,7 @@ A native macOS menu-bar app that shows a clean, fullscreen dancer display on an 
 ### Option A — Download pre-built app (easiest)
 
 1. Go to the [Releases](https://github.com/richardsladetdj-creator/TangoDisplay/releases) page
-2. Download `TangoDisplay-v3.21.5-universal.zip` (works on both Apple Silicon and Intel Macs)
+2. Download `TangoDisplay-v3.21.6-universal.zip` (works on both Apple Silicon and Intel Macs)
 3. Unzip and drag `TangoDisplay.app` to your `/Applications` folder
 4. **Right-click › Open** on first launch (required because the app is ad-hoc signed, not notarised)
 5. Grant the permissions macOS requests (see [Permissions](#permissions) below)
@@ -135,6 +135,11 @@ Key design decisions:
 ---
 
 ## Changelog
+
+### v3.21.6
+- Track counter position is now configurable: top-left, top-right, bottom-left, bottom-right, or centred inline with track text
+- When set to "Centred (in text order)", the counter appears as part of the text stack and can be reordered via Appearance > Visibility > Text Order for Dance Tracks
+- Position setting is in Display > Control Window, below the Show Track Counter toggle
 
 ### v3.21.5
 - Setlist: status bar now shows total duration when two or more tracks are selected

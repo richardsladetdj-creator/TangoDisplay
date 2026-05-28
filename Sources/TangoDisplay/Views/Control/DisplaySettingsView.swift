@@ -50,6 +50,12 @@ struct DisplaySettingsView: View {
             Section {
                 Toggle("Mirror mode (show live preview in control window)", isOn: $settings.mirrorMode)
                 Toggle("Show track counter (Track X of X)", isOn: $settings.showTrackCounter)
+                Picker("Position", selection: $settings.trackCounterPosition) {
+                    ForEach(TrackCounterPosition.allCases) { pos in
+                        Text(pos.displayName).tag(pos)
+                    }
+                }
+                .disabled(!settings.showTrackCounter)
             } header: {
                 Text("Control Window")
                     .foregroundColor(ControlTheme.accent)

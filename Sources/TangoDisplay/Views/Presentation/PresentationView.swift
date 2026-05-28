@@ -99,17 +99,12 @@ struct PresentationView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .overlay(alignment: .bottomTrailing) {
-            // Track counter — in an overlay so it is always in front by
-            // SwiftUI's layout contract, regardless of background image
-            // rendering. Toggle takes effect instantly; shown only when .playing
-            // and a position is available (always true for dance tracks).
-            // Shows "Track N of M" when the full playlist is known (Music.app,
-            // Embrace), or "Track N" from history alone (Swinsian).
+        .overlay(alignment: settings.trackCounterPosition.overlayAlignment) {
             if settings.showTrackCounter,
+               settings.trackCounterPosition != .centre,
                appState.displayState.mode == .playing,
                let pos = appState.displayState.tandaPosition {
-                Text(tandaLabel(pos))
+                Text(pos.label)
                     .font(activeProfile.trackCounterFont)
                     .foregroundColor(activeProfile.trackCounterSwiftUIColor)
                     .shadow(color: .black.opacity(0.6), radius: 4, x: 0, y: 1)
@@ -181,14 +176,6 @@ struct PresentationView: View {
             )
         case .override:
             overrideView
-        }
-    }
-
-    private func tandaLabel(_ pos: TandaPosition) -> String {
-        if let total = pos.total {
-            return "Track \(pos.current) of \(total)"
-        } else {
-            return "Track \(pos.current)"
         }
     }
 
