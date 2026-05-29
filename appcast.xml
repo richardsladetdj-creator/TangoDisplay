@@ -4,6 +4,25 @@
         <title>TangoDisplay</title>
         <link>https://github.com/richardsladetdj-creator/TangoDisplay</link>
         <item>
+            <title>Version 3.21.7</title>
+            <pubDate>Fri, 30 May 2026 12:00:00 +0000</pubDate>
+            <sparkle:version>76</sparkle:version>
+            <sparkle:shortVersionString>3.21.7</sparkle:shortVersionString>
+            <description><![CDATA[
+                <ul>
+                    <li>Decibel Meter: real-time room noise monitor in the Setlist toolbar. Enable in Settings &gt; Player &gt; Decibel Meter and set your acceptable noise range with the interactive colour-coded slider (blue = too quiet, green = acceptable, red = too loud)</li>
+                    <li>Practical Use Case: As the noise level can often vary between the DJ booth and the floor, set the noise level with a professional noise meter at floor level. Measure at the desk and set the acceptable range in Setlist.</li>
+                    <li>Built-in Player settings reorganised into logical groups (Playback, Cortinas, Safety, Appearance) for clarity</li>
+                    <li>Updated app icon</li>
+                </ul>
+            ]]></description>
+            <enclosure
+                url="https://github.com/richardsladetdj-creator/TangoDisplay/releases/download/v3.21.7/TangoDisplay-v3.21.7-universal.zip"
+                sparkle:edSignature="t1qH86V26keyx8rHn8mk/Q22CjCdtBqJAPpLFUGq7C1LaroFoakFwfc9P2dFrPNhfQsllX3mB30LeWVun53OBQ=="
+                length="5531514"
+                type="application/zip"/>
+        </item>
+        <item>
             <title>Version 3.21.6</title>
             <pubDate>Wed, 28 May 2026 12:00:00 +0000</pubDate>
             <sparkle:version>75</sparkle:version>
