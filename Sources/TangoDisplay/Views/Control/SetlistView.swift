@@ -694,17 +694,33 @@ struct SetlistView: View {
                 rowView(for: entry, wouldSkipAutoGap: wouldSkipAutoGap)
             }
             .onMove { source, dest in
-                setlist.move(from: source, to: dest)
+                // The ForEach iterates `entries` (filtered when Hide Played is on),
+                // so SwiftUI's offsets are into the filtered array. Map back to
+                // master-array offsets via stable UUIDs before mutating.
+                let sourceIDs = source.compactMap { entries[safe: $0]?.id }
+                let masterSource = IndexSet(sourceIDs.compactMap { id in
+                    setlist.entries.firstIndex(where: { $0.id == id })
+                })
+                let masterDest: Int
+                if dest < entries.count {
+                    let destID = entries[dest].id
+                    masterDest = setlist.entries.firstIndex(where: { $0.id == destID }) ?? setlist.entries.count
+                } else {
+                    masterDest = setlist.entries.count
+                }
+                setlist.move(from: masterSource, to: masterDest)
             }
             .onDelete { offsets in
-                let ids = Set(offsets.compactMap { setlist.entries[safe: $0]?.id })
+                let ids = Set(offsets.compactMap { entries[safe: $0]?.id })
                 pendingDeleteIDs = ids
             }
             .onInsert(of: [.fileURL]) { offset, providers in
                 // Convert the integer offset to a stable UUID anchor immediately,
                 // before any async work — the list may mutate during URL/metadata loading.
-                let anchorID: UUID? = offset < setlist.entries.count
-                    ? setlist.entries[offset].id
+                // Index the filtered `entries` (what the ForEach actually rendered),
+                // not `setlist.entries`, so the anchor is correct when Hide Played is on.
+                let anchorID: UUID? = offset < entries.count
+                    ? entries[offset].id
                     : nil
                 Task {
                     let urls = await loadURLs(from: providers)
@@ -744,6 +760,7 @@ struct SetlistView: View {
                     Label("Share", systemImage: "square.and.arrow.up")
                 }
                 .disabled(setlist.entries.isEmpty)
+                .help("Export setlist to Apple Music, M3U8, or save a report")
             }
             ToolbarItem(placement: .automatic) {
                 HStack(spacing: 2) {
@@ -754,6 +771,7 @@ struct SetlistView: View {
                     .popover(isPresented: $showEQPopover) {
                         EQView().environmentObject(settings)
                     }
+                    .help("Equaliser")
                     Button { showBalancePopover.toggle() } label: {
                         Label("Balance", systemImage: "dial.medium")
                     }
@@ -761,6 +779,7 @@ struct SetlistView: View {
                     .popover(isPresented: $showBalancePopover) {
                         BalanceView().environmentObject(settings)
                     }
+                    .help("Stereo balance")
                     Button { showAutoGapPopover.toggle() } label: {
                         Label("Auto-gap", systemImage: "timer")
                     }
@@ -768,6 +787,7 @@ struct SetlistView: View {
                     .popover(isPresented: $showAutoGapPopover) {
                         AutoGapPopoverView().environmentObject(settings)
                     }
+                    .help("Auto-gap between tracks")
                     Button { showReplayGainPopover.toggle() } label: {
                         Label("ReplayGain", systemImage: "waveform")
                     }
@@ -775,11 +795,13 @@ struct SetlistView: View {
                         ReplayGainPopoverView(player: player)
                             .environmentObject(settings)
                     }
+                    .help("ReplayGain normalisation")
                     if settings.selectedAudioUnitPlugin != nil {
                         Button { player.openPluginWindow() } label: {
                             Label("Plugin", systemImage: "puzzlepiece.fill")
                         }
                         .disabled(!settings.audioUnitPluginEnabled || settings.audioUnitPluginBypassed)
+                        .help("Open audio plugin window")
                     }
                 }
             }
@@ -793,12 +815,14 @@ struct SetlistView: View {
                     Label("Hide Played", systemImage: settings.hidePlayed ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
                 }
                 .disabled(setlist.entries.isEmpty)
+                .help(settings.hidePlayed ? "Show played tracks" : "Hide played tracks")
             }
             ToolbarItem(placement: .automatic) {
                 Button(role: .destructive) { showClearConfirmation = true } label: {
                     Label("Clear Setlist", systemImage: "trash")
                 }
                 .disabled(setlist.entries.isEmpty)
+                .help("Clear all tracks from setlist")
             }
         }
         .confirmationDialog(
