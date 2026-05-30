@@ -4,6 +4,24 @@
         <title>TangoDisplay</title>
         <link>https://github.com/richardsladetdj-creator/TangoDisplay</link>
         <item>
+            <title>Version 3.21.8</title>
+            <pubDate>Fri, 30 May 2026 12:00:00 +0000</pubDate>
+            <sparkle:version>77</sparkle:version>
+            <sparkle:shortVersionString>3.21.8</sparkle:shortVersionString>
+            <description><![CDATA[
+                <ul>
+                    <li>Hide Played: new toolbar toggle (filter icon) that hides fully-played tracks so the current track stays at the top of the visible list. The active track is always shown even when early-marked as played. Preference is persisted across sessions.</li>
+                    <li>Fixed: unplugging headphones (or any audio device change) on the System Default output no longer causes the current track to skip unexpectedly.</li>
+                    <li>Fixed album artwork overflowing its panel — artwork is now constrained to the same size as the setlist logo placeholder.</li>
+                </ul>
+            ]]></description>
+            <enclosure
+                url="https://github.com/richardsladetdj-creator/TangoDisplay/releases/download/v3.21.8/TangoDisplay-v3.21.8-universal.zip"
+                sparkle:edSignature="F3Zvr3jyIMISYB8E2f41xCsj7ikR/rhOtRzKtGH55BjJREfP/OrhDqYmDZp6JPy+/iWKkYK2L81AwiRD1oFqDw=="
+                length="5537777"
+                type="application/zip"/>
+        </item>
+        <item>
             <title>Version 3.21.7</title>
             <pubDate>Fri, 30 May 2026 12:00:00 +0000</pubDate>
             <sparkle:version>76</sparkle:version>
