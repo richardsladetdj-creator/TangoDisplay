@@ -4,6 +4,24 @@
         <title>TangoDisplay</title>
         <link>https://github.com/richardsladetdj-creator/TangoDisplay</link>
         <item>
+            <title>Version 3.22.0</title>
+            <pubDate>Sun, 31 May 2026 09:54:44 +0000</pubDate>
+            <sparkle:version>80</sparkle:version>
+            <sparkle:shortVersionString>3.22.0</sparkle:shortVersionString>
+            <description><![CDATA[
+                <ul>
+                    <li><strong>Startup Mode</strong> (new): choose how TangoDisplay launches in Settings &rsaquo; Startup. Full Experience opens both the Live Display and Settings window with Settings brought forward. Player Focused starts the Live Display minimised to the Dock with Settings focused.</li>
+                    <li><strong>Hide Left Menu Bar on Startup</strong> (new): collapse the Settings sidebar at launch. Expand it again at any time.</li>
+                    <li><strong>Cortina volume</strong>: new slider in Settings &rsaquo; Player &rsaquo; Cortinas (-10 to 0 dB) that attenuates the playback level of tracks identified as cortinas on top of ReplayGain. Default 0 dB (off).</li>
+                </ul>
+            ]]></description>
+            <enclosure
+                url="https://github.com/richardsladetdj-creator/TangoDisplay/releases/download/v3.22.0/TangoDisplay-v3.22.0-universal.zip"
+                sparkle:edSignature="dVfTPYAVv3HOwdF3o6sa+pGC4EYaW08rWqW9JBEYmaoLhmoC3zQbEBA0eb7r8dFRsxco050hJf+XpIq0NEa1Bw=="
+                length="5574015"
+                type="application/zip"/>
+        </item>
+        <item>
             <title>Version 3.21.10</title>
             <pubDate>Sat, 30 May 2026 13:00:00 +0000</pubDate>
             <sparkle:version>79</sparkle:version>
