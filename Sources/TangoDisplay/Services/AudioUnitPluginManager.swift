@@ -20,18 +20,6 @@ enum AudioUnitPluginError: Error, LocalizedError {
 
 final class AudioUnitPluginManager {
 
-    private static let allowedPluginNames: Set<String> = [
-        "AUNBandEQ",
-        "AUGraphicEQ",
-        "AUDynamicsProcessor",
-        "AUMultibandCompressor",
-        "AUPeakLimiter",
-        "AUHighShelfFilter",
-        "AULowShelfFilter",
-        "AUHipass",
-        "AULowpass",
-    ]
-
     func availableEffects() -> [AudioUnitPluginSelection] {
         let desc = AudioComponentDescription(
             componentType: kAudioUnitType_Effect,
@@ -42,9 +30,8 @@ final class AudioUnitPluginManager {
         )
         return AVAudioUnitComponentManager.shared()
             .components(matching: desc)
-            .compactMap { component in
-                guard Self.allowedPluginNames.contains(component.name) else { return nil }
-                return AudioUnitPluginSelection(
+            .map { component in
+                AudioUnitPluginSelection(
                     id: UUID(),
                     name: component.name,
                     manufacturerName: component.manufacturerName,
@@ -78,15 +65,24 @@ final class AudioUnitPluginManager {
         guard !AVAudioUnitComponentManager.shared().components(matching: desc).isEmpty else {
             throw AudioUnitPluginError.componentNotFound
         }
-        return try await withCheckedThrowingContinuation { continuation in
-            AVAudioUnit.instantiate(with: desc, options: []) { avUnit, error in
-                if let error {
-                    continuation.resume(throwing: AudioUnitPluginError.instantiationFailed(error.localizedDescription))
-                } else if let avUnit {
-                    continuation.resume(returning: avUnit)
-                } else {
-                    continuation.resume(throwing: AudioUnitPluginError.instantiationFailed("instantiation returned nil"))
-                }
+        // Try AUv3 out-of-process first so a 3rd-party plugin crash stays in its XPC.
+        // Fall back to in-process for AUv2 / plugins that don't support OOP hosting.
+        if let unit = await Self.tryInstantiate(desc: desc, options: .loadOutOfProcess) {
+            return unit
+        }
+        if let unit = await Self.tryInstantiate(desc: desc, options: []) {
+            return unit
+        }
+        throw AudioUnitPluginError.instantiationFailed("instantiation returned nil")
+    }
+
+    private static func tryInstantiate(
+        desc: AudioComponentDescription,
+        options: AudioComponentInstantiationOptions
+    ) async -> AVAudioUnit? {
+        await withCheckedContinuation { continuation in
+            AVAudioUnit.instantiate(with: desc, options: options) { avUnit, _ in
+                continuation.resume(returning: avUnit)
             }
         }
     }

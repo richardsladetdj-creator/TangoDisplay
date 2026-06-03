@@ -136,6 +136,11 @@ Key design decisions:
 
 ## Changelog
 
+### v3.24.0-beta.1 (pre-release — not distributed via auto-update)
+- **Audio Unit Plugin Chain** (new): the Setlist player can now host **up to 4 Audio Units in series** instead of a single Apple-bundled plugin. Configure the chain in **Player Settings › Audio Unit Plugins**: add plugins, reorder with the up/down arrows, bypass slots individually, open each plugin's editor window, and save/recall presets per slot. A new toolbar popover in the Setlist view gives quick chain access (bypass, slot enable, editor windows) for live use.
+- **Third-party plugins supported**: the browser now lists every `kAudioUnitType_Effect` Audio Unit installed on the system (e.g. FabFilter Pro-Q4, Klanghelm MJUC), not just the curated Apple effects. AUv3 plugins are loaded out-of-process via XPC so a plugin crash is isolated from TangoDisplay; AUv2 plugins fall back to in-process. **Third-party Audio Units run at your own risk** — an unstable plugin may still interrupt playback.
+- The legacy single-plugin setting from previous versions is migrated automatically into slot 1 of the new chain on first launch.
+
 ### v3.23.0
 - **Setlist Remote** (new): toggle on in **Settings › Player › Setlist Remote** to control volume, cortina volume, and replay gain from your phone over Wi-Fi. A built-in web page shows the URL and a QR code; a 4-digit PIN regenerates each time the app launches.
 - **Genre Backgrounds** (new): enable in **Appearance › Artwork & Motion** to assign a background image per genre (and one for cortinas), driven by your Cortina Rules entries. Priority: artist → genre → profile background → background colour.

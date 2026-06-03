@@ -7,11 +7,13 @@ import TangoDisplayCore
 final class PluginWindowViewController: NSViewController {
     private let pluginVC: NSViewController
     private let player: LocalPlayerSource
+    private let slotId: UUID
     private var sizeObservation: NSKeyValueObservation?
 
-    init(pluginVC: NSViewController, player: LocalPlayerSource) {
+    init(pluginVC: NSViewController, player: LocalPlayerSource, slotId: UUID) {
         self.pluginVC = pluginVC
         self.player = player
+        self.slotId = slotId
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -33,7 +35,7 @@ final class PluginWindowViewController: NSViewController {
 
         pluginVC.view.translatesAutoresizingMaskIntoConstraints = false
 
-        let barVC = NSHostingController(rootView: PluginWindowPresetBar(player: player))
+        let barVC = NSHostingController(rootView: PluginWindowPresetBar(player: player, slotId: slotId))
         addChild(barVC)
         view.addSubview(barVC.view)
         barVC.view.translatesAutoresizingMaskIntoConstraints = false
@@ -82,12 +84,17 @@ final class PluginWindowViewController: NSViewController {
 
 private struct PluginWindowPresetBar: View {
     @ObservedObject var player: LocalPlayerSource
+    let slotId: UUID
     @State private var showSaveAlert = false
     @State private var presetName = ""
 
+    private var presets: [AudioUnitPreset] {
+        player.slotPresets[slotId] ?? []
+    }
+
     private var activePresetLabel: String {
-        guard let id = player.activePresetID,
-              let p = player.availablePresets.first(where: { $0.id == id }) else { return "None" }
+        guard let id = player.slotActivePresetIDs[slotId],
+              let p = presets.first(where: { $0.id == id }) else { return "None" }
         return p.name
     }
 
@@ -99,27 +106,27 @@ private struct PluginWindowPresetBar: View {
                     .foregroundColor(.secondary)
                     .font(.system(size: 12))
 
-                if !player.availablePresets.isEmpty {
-                    let factoryPresets = player.availablePresets.filter(\.isFactory)
-                    let userPresets = player.availablePresets.filter(\.isUser)
+                if !presets.isEmpty {
+                    let factoryPresets = presets.filter(\.isFactory)
+                    let userPresets = presets.filter(\.isUser)
                     Menu {
                         if !factoryPresets.isEmpty {
                             Section("Factory") {
                                 ForEach(factoryPresets) { p in
-                                    Button(p.name) { player.applyPreset(p) }
+                                    Button(p.name) { player.applyPreset(p, toSlot: slotId) }
                                 }
                             }
                         }
                         if !userPresets.isEmpty {
                             Section("Saved") {
                                 ForEach(userPresets) { p in
-                                    Button(p.name) { player.applyPreset(p) }
+                                    Button(p.name) { player.applyPreset(p, toSlot: slotId) }
                                 }
                             }
                             Divider()
                             ForEach(userPresets) { p in
                                 Button("Delete \"\(p.name)\"", role: .destructive) {
-                                    try? player.deletePreset(p)
+                                    try? player.deletePreset(p, fromSlot: slotId)
                                 }
                             }
                         }
@@ -152,11 +159,11 @@ private struct PluginWindowPresetBar: View {
             Button("Save") {
                 let name = presetName.trimmingCharacters(in: .whitespaces)
                 guard !name.isEmpty else { return }
-                try? player.saveCurrentAsPreset(named: name)
+                try? player.saveCurrentAsPreset(named: name, forSlot: slotId)
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Enter a name for the current EQ settings.")
+            Text("Enter a name for the current plugin settings.")
         }
     }
 }
