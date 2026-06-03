@@ -4,6 +4,25 @@
         <title>TangoDisplay</title>
         <link>https://github.com/richardsladetdj-creator/TangoDisplay</link>
         <item>
+            <title>Version 3.23.0</title>
+            <pubDate>Wed, 03 Jun 2026 06:38:57 +0000</pubDate>
+            <sparkle:version>82</sparkle:version>
+            <sparkle:shortVersionString>3.23.0</sparkle:shortVersionString>
+            <description><![CDATA[
+                <ul>
+                    <li><strong>Setlist Remote</strong> (new): toggle on in Settings &rsaquo; Player &rsaquo; Setlist Remote to control volume, cortina volume, and replay gain from your phone over Wi-Fi. A built-in web page shows the URL and a QR code; a 4-digit PIN regenerates each time the app launches.</li>
+                    <li><strong>Genre Backgrounds</strong> (new): enable in Appearance &rsaquo; Artwork &amp; Motion to assign a background image per genre (and one for cortinas), driven by your Cortina Rules entries. Priority: artist &rarr; genre &rarr; profile background &rarr; background colour.</li>
+                    <li><strong>Multi-line Advanced Transformations</strong>: use \n in a transformation's Replace with field to split the displayed value across lines (also \r, \t, and \\ for a literal backslash). The live preview renders the wrapped result.</li>
+                    <li><strong>Album Artwork Edge Fade</strong> (new): new slider in Appearance &rsaquo; Artwork &amp; Motion &rsaquo; Album Artwork that softly fades the edges of album art into the background.</li>
+                </ul>
+            ]]></description>
+            <enclosure
+                url="https://github.com/richardsladetdj-creator/TangoDisplay/releases/download/v3.23.0/TangoDisplay-v3.23.0-universal.zip"
+                sparkle:edSignature="JOzBdJA//FGsEEWXteW/rcA0m6IvsaMY/d/6eiiPc8XA6qGu1R09P6y9w4Vt6+YSB08q4PUr1zMWtGhj8IC6Dg=="
+                length="5802267"
+                type="application/zip"/>
+        </item>
+        <item>
             <title>Version 3.22.1</title>
             <pubDate>Tue, 02 Jun 2026 11:08:24 +0000</pubDate>
             <sparkle:version>81</sparkle:version>
