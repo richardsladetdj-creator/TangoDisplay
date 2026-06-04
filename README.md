@@ -49,7 +49,7 @@ A native macOS menu-bar app that shows a clean, fullscreen dancer display on an 
 ### Option A — Download pre-built app (easiest)
 
 1. Go to the [Releases](https://github.com/richardsladetdj-creator/TangoDisplay/releases) page
-2. Download `TangoDisplay-v3.24.0-universal.zip` (works on both Apple Silicon and Intel Macs)
+2. Download `TangoDisplay-v3.24.1-universal.zip` (works on both Apple Silicon and Intel Macs)
 3. Unzip and drag `TangoDisplay.app` to your `/Applications` folder
 4. **Right-click › Open** on first launch (required because the app is ad-hoc signed, not notarised)
 5. Grant the permissions macOS requests (see [Permissions](#permissions) below)
@@ -135,6 +135,10 @@ Key design decisions:
 ---
 
 ## Changelog
+
+### v3.24.1
+- **More third-party plugins now appear**: the plugin browser also lists **Music Effect** Audio Units (`kAudioUnitType_MusicEffect`), not just plain effects — so plugins such as **FabFilter Pro-Q 4** that register as music effects now show up and can be added to the chain.
+- **Fixed a crash when opening some third-party plugin editors** (e.g. FabFilter Pro-Q 4). Plugins now load **out-of-process by default** so a plugin's editor or processing crash is isolated from TangoDisplay. A small in-process allowlist (currently Klanghelm MJUC) keeps plugin-driven window auto-resize working where it's needed.
 
 ### v3.24.0
 - **Audio Unit Plugin Chain** (new): the Setlist player can now host **up to 4 Audio Units in series** instead of a single Apple-bundled plugin. Configure the chain in **Player Settings › Audio Unit Plugins**: add plugins, reorder with the up/down arrows, replace or remove individual slots, open each plugin's editor window, and save/recall presets per slot. A toolbar popover in the Setlist view gives quick chain access for live use — bypass the whole chain, toggle individual slots on or off, and open editor windows.

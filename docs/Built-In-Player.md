@@ -421,14 +421,11 @@ If you used a single plugin in an earlier version of TangoDisplay, it is migrate
 
 ### Supported Plugins
 
-The plugin browser lists every `kAudioUnitType_Effect` Audio Unit installed on your system — both Apple's built-in effects (parametric and graphic EQ, dynamics processor, multi-band compressor, peak limiter, shelf and pass filters) and any third-party effects you have installed (e.g. FabFilter Pro-Q4, Klanghelm MJUC).
+The plugin browser lists every effect Audio Unit installed on your system — both `kAudioUnitType_Effect` (plain effects) and `kAudioUnitType_MusicEffect` (effects that also accept MIDI, such as FabFilter Pro-Q 4). This covers Apple's built-in effects (parametric and graphic EQ, dynamics processor, multi-band compressor, peak limiter, shelf and pass filters) and any third-party effects you have installed (e.g. FabFilter Pro-Q 4, Klanghelm MJUC).
 
-Plugins load according to their format:
+Plugins load **out-of-process** by default: each plugin runs in its own process, so if a plugin crashes — whether while processing audio or when you open its editor — the crash is isolated and won't take down TangoDisplay. This is the standard, well-tested hosting path that third-party plugins expect.
 
-| Format | How it loads | Why |
-|---|---|---|
-| **AUv3** | Out-of-process via XPC | A plugin crash is isolated and won't take down TangoDisplay |
-| **AUv2** | In-process | Required for correct editor-window resizing |
+A small number of plugins need to be hosted **in-process** for plugin-driven window auto-resize to work (when hosted out-of-process their editor view can't tell the host to grow the window). These are handled via a built-in allowlist — currently Klanghelm MJUC, whose expander panel resizes the editor at runtime. In-process plugins are not crash-isolated.
 
 ### Per-Slot Controls
 
