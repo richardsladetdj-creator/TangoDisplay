@@ -4,6 +4,22 @@
         <title>TangoDisplay</title>
         <link>https://github.com/richardsladetdj-creator/TangoDisplay</link>
         <item>
+            <title>Version 3.25.4</title>
+            <pubDate>Thu, 12 Jun 2026 12:00:00 +0000</pubDate>
+            <sparkle:version>95</sparkle:version>
+            <sparkle:shortVersionString>3.25.4</sparkle:shortVersionString>
+            <description><![CDATA[
+                <ul>
+                    <li><strong>Fixed (Setlist + JRiver)</strong>: when dragging a mixed batch of tracks with Duplicate Protection enabled and "Add" chosen for all duplicates, duplicate tracks could appear before fresh tracks at the drop position &mdash; now all tracks insert in original drag order at the correct position.</li>
+                </ul>
+            ]]></description>
+            <enclosure
+                url="https://github.com/richardsladetdj-creator/TangoDisplay/releases/download/v3.25.4/TangoDisplay-v3.25.4-universal.zip"
+                sparkle:edSignature="qCau01xoLMov2d5ZdVyU88aMnJuxiPRs3qnOnGBCW+fepA/HLi/l4f87HXrDv8ifFGhaTrL/SHgeIDOcA6d2CA=="
+                length="6411306"
+                type="application/zip"/>
+        </item>
+        <item>
             <title>Version 3.25.3</title>
             <pubDate>Tue, 10 Jun 2026 12:00:00 +0000</pubDate>
             <sparkle:version>93</sparkle:version>
