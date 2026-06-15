@@ -31,8 +31,9 @@ struct AppearanceVisibilityTab: View {
                 visibilityRow("Title",   dance: $working.showTitleDance,   cortina: $working.showTitleCortina)
                 visibilityRow("Singer",  dance: $working.showSingerDance,  cortina: $working.showSingerCortina)
                 visibilityRow("Artwork", dance: $working.showArtworkDance, cortina: $working.showArtworkCortina)
-                ForEach($working.customTextLines) { $line in
-                    visibilityRow(customLabel(line), dance: $line.showInDance, cortina: $line.showInCortina)
+                ForEach(working.customTextLines) { line in
+                    let b = customLineBinding(id: line.id)
+                    visibilityRow(customLabel(line), dance: b.showInDance, cortina: b.showInCortina)
                 }
                 Divider()
                 Toggle("Show next track during cortina", isOn: $working.showNextTrackDuringCortina)
@@ -81,8 +82,8 @@ struct AppearanceVisibilityTab: View {
                     .font(.caption)
                     .foregroundColor(.secondary)
 
-                ForEach($working.customTextLines) { $line in
-                    customLineRow(line: $line)
+                ForEach(working.customTextLines) { line in
+                    customLineRow(line: customLineBinding(id: line.id))
                 }
 
                 Button {
@@ -249,6 +250,20 @@ struct AppearanceVisibilityTab: View {
             }
         }
         .padding(.vertical, 6)
+    }
+
+    /// Stable, id-keyed binding to a custom line. The getter looks up by id rather than
+    /// array index, so a transient read during a delete (when the index is stale) falls
+    /// back to a throwaway value instead of trapping on an out-of-bounds subscript.
+    private func customLineBinding(id: UUID) -> Binding<CustomTextLine> {
+        Binding(
+            get: { working.customTextLines.first(where: { $0.id == id }) ?? CustomTextLine() },
+            set: { newValue in
+                if let idx = working.customTextLines.firstIndex(where: { $0.id == id }) {
+                    working.customTextLines[idx] = newValue
+                }
+            }
+        )
     }
 
     private func addCustomLine() {
