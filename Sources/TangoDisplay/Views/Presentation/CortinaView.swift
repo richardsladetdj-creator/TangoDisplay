@@ -13,7 +13,8 @@ struct CortinaView: View {
 
             // Cortina-track section: CORTINA label always shown; artist/title gated by toggle
             VStack(spacing: 12) {
-                ForEach(profile.cortinaTrackItemOrder, id: \.self) { item in
+                ForEach(profile.cortinaTrackItemOrder, id: \.self) { entry in
+                    if case .builtin(let item) = entry {
                     switch item {
                     case .cortinaLabel:
                         Text(settings.cortinaLabel)
@@ -45,6 +46,7 @@ struct CortinaView: View {
                         }
                     default:
                         EmptyView()
+                    }
                     }
                 }
             }
@@ -81,9 +83,27 @@ struct CortinaView: View {
                             }
                         }
                     } else {
-                        ForEach(profile.cortinaItemOrder, id: \.self) { item in
-                            switch item {
-                            case .nextUpLabel:
+                        ForEach(profile.cortinaItemOrder, id: \.self) { entry in
+                            switch entry {
+                            case .custom(let id):
+                                if showComingUp, let next = state.nextTrack,
+                                   let line = profile.customTextLines.first(where: { $0.id == id }),
+                                   line.showInCortina {
+                                    let resolved = resolveCustomPlaceholders(line.text, track: next,
+                                                                             profile: profile, settings: settings)
+                                    if !resolved.isEmpty {
+                                        Text(resolved)
+                                            .font(profile.font(name: line.fontName, size: line.fontSize,
+                                                               bold: line.fontBold, italic: line.fontItalic))
+                                            .foregroundColor(Color(hex: line.colorHex))
+                                            .multilineTextAlignment(.center)
+                                            .lineLimit(2)
+                                            .minimumScaleFactor(0.5)
+                                    }
+                                }
+                            case .builtin(let item):
+                                switch item {
+                                case .nextUpLabel:
                                 if showComingUp {
                                     Text(settings.nextUpLabel)
                                         .font(profile.nextUpLabelFont)
@@ -166,8 +186,9 @@ struct CortinaView: View {
                                         .shadow(color: .black.opacity(0.6), radius: 4, x: 0, y: 1)
                                         .multilineTextAlignment(.center)
                                 }
-                            default:
-                                EmptyView()
+                                default:
+                                    EmptyView()
+                                }
                             }
                         }
                     }

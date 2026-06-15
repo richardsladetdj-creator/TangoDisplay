@@ -1,12 +1,15 @@
+import AppKit
 import SwiftUI
 import TangoDisplayCore
 
 struct AppearanceVisibilityTab: View {
     @EnvironmentObject var settings: AppSettings
     @Binding var working: AppearanceProfile
-    @Binding var danceDragItem: DisplayTextItem?
-    @Binding var cortinaTrackDragItem: DisplayTextItem?
-    @Binding var cortinaUpDragItem: DisplayTextItem?
+    @Binding var danceDragItem: OrderEntry?
+    @Binding var cortinaTrackDragItem: OrderEntry?
+    @Binding var cortinaUpDragItem: OrderEntry?
+
+    private let availableFonts: [String] = ["System"] + NSFontManager.shared.availableFontFamilies.sorted()
 
     var body: some View {
         Form {
@@ -28,6 +31,9 @@ struct AppearanceVisibilityTab: View {
                 visibilityRow("Title",   dance: $working.showTitleDance,   cortina: $working.showTitleCortina)
                 visibilityRow("Singer",  dance: $working.showSingerDance,  cortina: $working.showSingerCortina)
                 visibilityRow("Artwork", dance: $working.showArtworkDance, cortina: $working.showArtworkCortina)
+                ForEach($working.customTextLines) { $line in
+                    visibilityRow(customLabel(line), dance: $line.showInDance, cortina: $line.showInCortina)
+                }
                 Divider()
                 Toggle("Show next track during cortina", isOn: $working.showNextTrackDuringCortina)
             } header: {
@@ -44,8 +50,8 @@ struct AppearanceVisibilityTab: View {
             Section {
                 orderRows(items: $working.danceItemOrder, dragItem: $danceDragItem,
                           filter: {
-                              ($0 != .trackCounter || settings.trackCounterPosition == .centre) &&
-                              ($0 != .tdjName       || settings.tdjNamePosition == .centre)
+                              ($0 != .builtin(.trackCounter) || settings.trackCounterPosition == .centre) &&
+                              ($0 != .builtin(.tdjName)       || settings.tdjNamePosition == .centre)
                           })
             } header: {
                 orderHeader("Dance Tracks")
@@ -59,7 +65,7 @@ struct AppearanceVisibilityTab: View {
 
             Section {
                 orderRows(items: $working.cortinaItemOrder, dragItem: $cortinaUpDragItem,
-                          filter: { $0 != .tdjName || settings.tdjNamePosition == .centre })
+                          filter: { $0 != .builtin(.tdjName) || settings.tdjNamePosition == .centre })
             } header: {
                 orderHeader("Cortinas — Coming Up")
             } footer: {
@@ -68,6 +74,26 @@ struct AppearanceVisibilityTab: View {
                 } icon: {
                     Image(systemName: "info.circle")
                 }
+            }
+
+            Section {
+                Text("Free text with placeholders, resolved from the current/next track. Available: {Artist} {Title} {Genre} {Year} {Singer} {AlbumArtist} {Comment} {Grouping} (case-insensitive).")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+
+                ForEach($working.customTextLines) { $line in
+                    customLineRow(line: $line)
+                }
+
+                Button {
+                    addCustomLine()
+                } label: {
+                    Label("Add Custom Line", systemImage: "plus")
+                }
+                .buttonStyle(.bordered)
+            } header: {
+                Text("Custom Lines")
+                    .foregroundColor(ControlTheme.accent)
             }
         }
         .formStyle(.grouped)
@@ -89,10 +115,47 @@ struct AppearanceVisibilityTab: View {
         }
     }
 
+    /// Display label for a custom line: its (truncated) text, or a placeholder name when empty.
+    private func customLabel(_ line: CustomTextLine) -> String {
+        let trimmed = line.text.trimmingCharacters(in: .whitespaces)
+        let base = trimmed.isEmpty ? "Custom Line" : trimmed
+        return base.count > 28 ? String(base.prefix(28)) + "…" : base
+    }
+
+    private func label(for entry: OrderEntry) -> String {
+        switch entry {
+        case .builtin(let item):
+            return item.displayName
+        case .custom(let id):
+            if let line = working.customTextLines.first(where: { $0.id == id }) {
+                return customLabel(line)
+            }
+            return "Custom Line"
+        }
+    }
+
+    private func dragToken(for entry: OrderEntry) -> String {
+        switch entry {
+        case .builtin(let item): return "builtin:\(item.rawValue)"
+        case .custom(let id):    return "custom:\(id.uuidString)"
+        }
+    }
+
+    /// Custom entries whose line no longer exists are hidden (deletes remove them from
+    /// the order arrays, but this is a safety net).
+    private func entryExists(_ entry: OrderEntry) -> Bool {
+        switch entry {
+        case .builtin:        return true
+        case .custom(let id): return working.customTextLines.contains { $0.id == id }
+        }
+    }
+
     @ViewBuilder
-    private func orderRows(items: Binding<[DisplayTextItem]>, dragItem: Binding<DisplayTextItem?>,
-                           filter: ((DisplayTextItem) -> Bool)? = nil) -> some View {
-        let visibleIndices = items.wrappedValue.indices.filter { filter?(items.wrappedValue[$0]) ?? true }
+    private func orderRows(items: Binding<[OrderEntry]>, dragItem: Binding<OrderEntry?>,
+                           filter: ((OrderEntry) -> Bool)? = nil) -> some View {
+        let visibleIndices = items.wrappedValue.indices.filter {
+            entryExists(items.wrappedValue[$0]) && (filter?(items.wrappedValue[$0]) ?? true)
+        }
         VStack(spacing: 0) {
             ForEach(visibleIndices, id: \.self) { index in
                 let isFirstVisible = index == visibleIndices.first
@@ -102,7 +165,7 @@ struct AppearanceVisibilityTab: View {
                     Image(systemName: "line.3.horizontal")
                         .foregroundColor(.secondary)
                         .frame(width: 20)
-                    Text(items.wrappedValue[index].displayName)
+                    Text(label(for: items.wrappedValue[index]))
                     Spacer()
                     Button {
                         items.wrappedValue.swapAt(index, index - 1)
@@ -122,7 +185,7 @@ struct AppearanceVisibilityTab: View {
                 .padding(.vertical, 8)
                 .onDrag {
                     dragItem.wrappedValue = items.wrappedValue[index]
-                    return NSItemProvider(object: items.wrappedValue[index].rawValue as NSString)
+                    return NSItemProvider(object: dragToken(for: items.wrappedValue[index]) as NSString)
                 }
                 .onDrop(of: [.plainText], delegate: OrderDropDelegate(
                     target: items.wrappedValue[index],
@@ -132,14 +195,83 @@ struct AppearanceVisibilityTab: View {
             }
         }
     }
+
+    // MARK: - Custom line editor
+
+    @ViewBuilder
+    private func customLineRow(line: Binding<CustomTextLine>) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            TextField("e.g. {Artist} {Year} ({Genre}) {Title}", text: line.text)
+                .textFieldStyle(.roundedBorder)
+
+            HStack(spacing: 8) {
+                Picker("Font", selection: line.fontName) {
+                    ForEach(availableFonts, id: \.self) { family in
+                        Text(family).tag(family)
+                    }
+                }
+                .labelsHidden()
+                .frame(width: 160)
+
+                Text(String(format: "%.0fpt", line.wrappedValue.fontSize))
+                    .monospacedDigit()
+                    .foregroundColor(.secondary)
+                    .frame(width: 40, alignment: .trailing)
+
+                Stepper("", value: line.fontSize, in: 8...300, step: 4)
+                    .labelsHidden()
+                    .fixedSize()
+
+                Toggle("B", isOn: line.fontBold)
+                    .toggleStyle(.button)
+                    .help("Bold")
+
+                Toggle("I", isOn: line.fontItalic)
+                    .toggleStyle(.button)
+                    .help("Italic")
+
+                Spacer()
+
+                ColorPicker("", selection: Binding(
+                    get: { Color(hex: line.wrappedValue.colorHex) },
+                    set: { line.wrappedValue.colorHex = $0.hexString }
+                ))
+                .labelsHidden()
+                .frame(width: 32)
+
+                Button(role: .destructive) {
+                    deleteCustomLine(id: line.wrappedValue.id)
+                } label: {
+                    Image(systemName: "trash")
+                        .foregroundColor(.red)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.vertical, 6)
+    }
+
+    private func addCustomLine() {
+        let line = CustomTextLine()
+        working.customTextLines.append(line)
+        working.danceItemOrder.append(.custom(line.id))
+        working.cortinaItemOrder.append(.custom(line.id))
+    }
+
+    private func deleteCustomLine(id: UUID) {
+        working.customTextLines.removeAll { $0.id == id }
+        working.danceItemOrder.removeAll { $0 == .custom(id) }
+        working.cortinaItemOrder.removeAll { $0 == .custom(id) }
+        working.cortinaTrackItemOrder.removeAll { $0 == .custom(id) }
+    }
 }
 
 // MARK: - Drop delegate (shared with visibility tab)
 
 struct OrderDropDelegate: DropDelegate {
-    let target: DisplayTextItem
-    var items: Binding<[DisplayTextItem]>
-    var dragging: Binding<DisplayTextItem?>
+    let target: OrderEntry
+    var items: Binding<[OrderEntry]>
+    var dragging: Binding<OrderEntry?>
 
     func dropUpdated(info: DropInfo) -> DropProposal? {
         .init(operation: .move)

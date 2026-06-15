@@ -31,9 +31,9 @@ struct AppearanceSettingsView: View {
     @State private var bgThumbnail: NSImage? = nil
     @State private var artistBgThumbnails: [UUID: NSImage] = [:]
     @State private var genreBgThumbnails: [UUID: NSImage] = [:]
-    @State private var danceDragItem: DisplayTextItem? = nil
-    @State private var cortinaTrackDragItem: DisplayTextItem? = nil
-    @State private var cortinaUpDragItem: DisplayTextItem? = nil
+    @State private var danceDragItem: OrderEntry? = nil
+    @State private var cortinaTrackDragItem: OrderEntry? = nil
+    @State private var cortinaUpDragItem: OrderEntry? = nil
 
     private var workingIsBuiltIn: Bool { working.isBuiltIn }
     private var isDirty: Bool { working != savedWorking }

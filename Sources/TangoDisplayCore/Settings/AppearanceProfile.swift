@@ -93,8 +93,11 @@ public struct AppearanceProfile: Codable, Identifiable, Equatable {
     public var albumArtworkEdgeFade: Double  // 0.0 = no fade, 1.0 = max radial edge fade
 
     // Configurable vertical order of text items on the display
-    public var danceItemOrder: [DisplayTextItem]   // order for dance track display
-    public var cortinaItemOrder: [DisplayTextItem] // order for cortina "coming up" section
+    public var danceItemOrder: [OrderEntry]   // order for dance track display
+    public var cortinaItemOrder: [OrderEntry] // order for cortina "coming up" section
+
+    // User-defined free-text lines with metadata placeholders (referenced by .custom in the order arrays)
+    public var customTextLines: [CustomTextLine]
 
     // Singer line (displays a track metadata field below the title)
     public var showSinger: Bool
@@ -164,7 +167,7 @@ public struct AppearanceProfile: Codable, Identifiable, Equatable {
     public var idleMessageColor:      String
 
     // Orderable items for cortina-track section
-    public var cortinaTrackItemOrder: [DisplayTextItem]
+    public var cortinaTrackItemOrder: [OrderEntry]
 
     // Last Tanda label font/colour
     public var lastTandaLabelFontName:   String
@@ -235,8 +238,9 @@ public struct AppearanceProfile: Codable, Identifiable, Equatable {
                 albumArtworkOffsetX: Double = 0.0,
                 albumArtworkOffsetY: Double = 0.0,
                 albumArtworkEdgeFade: Double = 0.0,
-                danceItemOrder: [DisplayTextItem] = [.genre, .artist, .year, .title, .singer, .lastTandaLabel, .tdjName, .trackCounter],
-                cortinaItemOrder: [DisplayTextItem] = [.genre, .artist, .year, .singer, .lastTandaLabel, .tdjName],
+                danceItemOrder: [OrderEntry] = [.builtin(.genre), .builtin(.artist), .builtin(.year), .builtin(.title), .builtin(.singer), .builtin(.lastTandaLabel), .builtin(.tdjName), .builtin(.trackCounter)],
+                cortinaItemOrder: [OrderEntry] = [.builtin(.genre), .builtin(.artist), .builtin(.year), .builtin(.singer), .builtin(.lastTandaLabel), .builtin(.tdjName)],
+                customTextLines: [CustomTextLine] = [],
                 showSinger: Bool = false,
                 singerSource: SingerSource = .comments,
                 showSingerDuringCortina: Bool = false,
@@ -276,7 +280,7 @@ public struct AppearanceProfile: Codable, Identifiable, Equatable {
                 idleMessageFontName: String = "System", idleMessageFontSize: Double = 48,
                 idleMessageFontBold: Bool = false, idleMessageFontItalic: Bool = false,
                 idleMessageColor: String = "#FFFFFF",
-                cortinaTrackItemOrder: [DisplayTextItem] = [.cortinaLabel, .cortinaArtist, .cortinaTitle],
+                cortinaTrackItemOrder: [OrderEntry] = [.builtin(.cortinaLabel), .builtin(.cortinaArtist), .builtin(.cortinaTitle)],
                 lastTandaLabelFontName: String = "System", lastTandaLabelFontSize: Double = 36,
                 lastTandaLabelFontBold: Bool = false, lastTandaLabelFontItalic: Bool = false,
                 lastTandaLabelColor: String = "#FF4444",
@@ -342,6 +346,7 @@ public struct AppearanceProfile: Codable, Identifiable, Equatable {
         self.albumArtworkEdgeFade = albumArtworkEdgeFade
         self.danceItemOrder = danceItemOrder
         self.cortinaItemOrder = cortinaItemOrder
+        self.customTextLines = customTextLines
         self.showSinger = showSinger
         self.singerSource = singerSource
         self.showSingerDuringCortina = showSingerDuringCortina
@@ -477,17 +482,18 @@ public struct AppearanceProfile: Codable, Identifiable, Equatable {
         singerFontBold          = try c.decodeIfPresent(Bool.self,    forKey: .singerFontBold)          ?? false
         singerFontItalic        = try c.decodeIfPresent(Bool.self,    forKey: .singerFontItalic)        ?? false
         singerColor             = try c.decodeIfPresent(String.self,  forKey: .singerColor)             ?? "#AAAAAA"
-        danceItemOrder   = try c.decodeIfPresent([DisplayTextItem].self, forKey: .danceItemOrder)   ?? [.genre, .artist, .year, .title, .singer]
-        var decodedCortinaOrder = try c.decodeIfPresent([DisplayTextItem].self, forKey: .cortinaItemOrder) ?? [.genre, .artist, .year, .singer]
-        if !decodedCortinaOrder.contains(.title) {
-            if let singerIdx = decodedCortinaOrder.firstIndex(of: .singer) {
-                decodedCortinaOrder.insert(.title, at: singerIdx)
+        danceItemOrder   = try c.decodeIfPresent([OrderEntry].self, forKey: .danceItemOrder)   ?? [.builtin(.genre), .builtin(.artist), .builtin(.year), .builtin(.title), .builtin(.singer)]
+        customTextLines  = try c.decodeIfPresent([CustomTextLine].self, forKey: .customTextLines) ?? []
+        var decodedCortinaOrder = try c.decodeIfPresent([OrderEntry].self, forKey: .cortinaItemOrder) ?? [.builtin(.genre), .builtin(.artist), .builtin(.year), .builtin(.singer)]
+        if !decodedCortinaOrder.contains(.builtin(.title)) {
+            if let singerIdx = decodedCortinaOrder.firstIndex(of: .builtin(.singer)) {
+                decodedCortinaOrder.insert(.builtin(.title), at: singerIdx)
             } else {
-                decodedCortinaOrder.append(.title)
+                decodedCortinaOrder.append(.builtin(.title))
             }
         }
-        if !decodedCortinaOrder.contains(.nextUpLabel) {
-            decodedCortinaOrder.insert(.nextUpLabel, at: 0)
+        if !decodedCortinaOrder.contains(.builtin(.nextUpLabel)) {
+            decodedCortinaOrder.insert(.builtin(.nextUpLabel), at: 0)
         }
         cortinaItemOrder = decodedCortinaOrder
 
@@ -496,7 +502,7 @@ public struct AppearanceProfile: Codable, Identifiable, Equatable {
         let legacyShowSinger        = (try c.decodeIfPresent(Bool.self, forKey: .showSinger))           ?? false
         let legacyShowSingerCortina = (try c.decodeIfPresent(Bool.self, forKey: .showSingerDuringCortina)) ?? false
         let legacyShowArtwork       = (try c.decodeIfPresent(Bool.self, forKey: .showAlbumArtwork))     ?? false
-        let legacyCortinaHadTitle   = (try c.decodeIfPresent([DisplayTextItem].self, forKey: .cortinaItemOrder))?.contains(.title) ?? false
+        let legacyCortinaHadTitle   = (try c.decodeIfPresent([OrderEntry].self, forKey: .cortinaItemOrder))?.contains(.builtin(.title)) ?? false
 
         showGenreDance   = (try c.decodeIfPresent(Bool.self, forKey: .showGenreDance))   ?? true
         showArtistDance  = (try c.decodeIfPresent(Bool.self, forKey: .showArtistDance))  ?? true
@@ -547,8 +553,8 @@ public struct AppearanceProfile: Codable, Identifiable, Equatable {
         idleMessageFontItalic = try c.decodeIfPresent(Bool.self,   forKey: .idleMessageFontItalic) ?? false
         idleMessageColor      = try c.decodeIfPresent(String.self, forKey: .idleMessageColor)      ?? artistColor
 
-        cortinaTrackItemOrder = try c.decodeIfPresent([DisplayTextItem].self, forKey: .cortinaTrackItemOrder)
-            ?? [.cortinaLabel, .cortinaArtist, .cortinaTitle]
+        cortinaTrackItemOrder = try c.decodeIfPresent([OrderEntry].self, forKey: .cortinaTrackItemOrder)
+            ?? [.builtin(.cortinaLabel), .builtin(.cortinaArtist), .builtin(.cortinaTitle)]
 
         lastTandaLabelFontName   = try c.decodeIfPresent(String.self, forKey: .lastTandaLabelFontName)   ?? "System"
         lastTandaLabelFontSize   = try c.decodeIfPresent(Double.self, forKey: .lastTandaLabelFontSize)   ?? 36
@@ -574,24 +580,24 @@ public struct AppearanceProfile: Codable, Identifiable, Equatable {
         overrideTextColor      = try c.decodeIfPresent(String.self, forKey: .overrideTextColor)      ?? titleColor
 
         // Migration: append items to order lists if absent
-        if !danceItemOrder.contains(.lastTandaLabel) {
-            danceItemOrder.append(.lastTandaLabel)
+        if !danceItemOrder.contains(.builtin(.lastTandaLabel)) {
+            danceItemOrder.append(.builtin(.lastTandaLabel))
         }
-        if !danceItemOrder.contains(.tdjName) {
-            if let idx = danceItemOrder.firstIndex(of: .trackCounter) {
-                danceItemOrder.insert(.tdjName, at: idx)
+        if !danceItemOrder.contains(.builtin(.tdjName)) {
+            if let idx = danceItemOrder.firstIndex(of: .builtin(.trackCounter)) {
+                danceItemOrder.insert(.builtin(.tdjName), at: idx)
             } else {
-                danceItemOrder.append(.tdjName)
+                danceItemOrder.append(.builtin(.tdjName))
             }
         }
-        if !danceItemOrder.contains(.trackCounter) {
-            danceItemOrder.append(.trackCounter)
+        if !danceItemOrder.contains(.builtin(.trackCounter)) {
+            danceItemOrder.append(.builtin(.trackCounter))
         }
-        if !cortinaItemOrder.contains(.lastTandaLabel) {
-            cortinaItemOrder.append(.lastTandaLabel)
+        if !cortinaItemOrder.contains(.builtin(.lastTandaLabel)) {
+            cortinaItemOrder.append(.builtin(.lastTandaLabel))
         }
-        if !cortinaItemOrder.contains(.tdjName) {
-            cortinaItemOrder.append(.tdjName)
+        if !cortinaItemOrder.contains(.builtin(.tdjName)) {
+            cortinaItemOrder.append(.builtin(.tdjName))
         }
     }
 
@@ -670,6 +676,49 @@ public struct AppearanceProfile: Codable, Identifiable, Equatable {
         trackCounterColor: "#B3B3B3",
         transitionStyle: .cut, transitionDuration: 0.0
     )
+}
+
+/// An entry in a display order array: either a fixed built-in field or a reference
+/// to a user-defined `CustomTextLine` (by id). Decodes legacy plain-string arrays
+/// (`["genre","artist",…]`) as `.builtin` for backward compatibility; always encodes
+/// the tagged-object form.
+public enum OrderEntry: Equatable, Hashable, Codable {
+    case builtin(DisplayTextItem)
+    case custom(UUID)
+
+    private enum CodingKeys: String, CodingKey { case kind, value, id }
+
+    public init(from decoder: Decoder) throws {
+        // Legacy form: a bare string equal to a DisplayTextItem rawValue.
+        if let single = try? decoder.singleValueContainer(),
+           let raw = try? single.decode(String.self),
+           let item = DisplayTextItem(rawValue: raw) {
+            self = .builtin(item)
+            return
+        }
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        switch try c.decode(String.self, forKey: .kind) {
+        case "builtin":
+            self = .builtin(try c.decode(DisplayTextItem.self, forKey: .value))
+        case "custom":
+            self = .custom(try c.decode(UUID.self, forKey: .id))
+        default:
+            throw DecodingError.dataCorruptedError(forKey: .kind, in: c,
+                debugDescription: "Unknown OrderEntry kind")
+        }
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        switch self {
+        case .builtin(let item):
+            try c.encode("builtin", forKey: .kind)
+            try c.encode(item, forKey: .value)
+        case .custom(let id):
+            try c.encode("custom", forKey: .kind)
+            try c.encode(id, forKey: .id)
+        }
+    }
 }
 
 public enum DisplayTextItem: String, Codable, CaseIterable {

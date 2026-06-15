@@ -49,7 +49,7 @@ A native macOS menu-bar app that shows a clean, fullscreen dancer display on an 
 ### Option A — Download pre-built app (easiest)
 
 1. Go to the [Releases](https://github.com/richardsladetdj-creator/TangoDisplay/releases) page
-2. Download `TangoDisplay-v3.25.5-universal.zip` (works on both Apple Silicon and Intel Macs)
+2. Download `TangoDisplay-v3.26.0-universal.zip` (works on both Apple Silicon and Intel Macs)
 3. Unzip and drag `TangoDisplay.app` to your `/Applications` folder
 4. **Right-click › Open** on first launch (required because the app is ad-hoc signed, not notarised)
 5. Grant the permissions macOS requests (see [Permissions](#permissions) below)
@@ -135,6 +135,9 @@ Key design decisions:
 ---
 
 ## Changelog
+
+### v3.26.0
+- **New (Custom Text Lines):** add unlimited free-text lines to the display for dance tracks and the cortina "coming up" preview. Each line supports metadata placeholders (`{Artist} {Title} {Genre} {Year} {Singer} {AlbumArtist} {Comment} {Grouping}`, case-insensitive), its own font, size, bold/italic and colour, independent Dance / Next Up visibility, and can be reordered among the built-in fields. Managed in Appearance › Visibility › Custom Lines
 
 ### v3.25.5
 - **Fixed (Setlist paste):** pasting tracks copied from foobar2000 now works — foobar2000 writes file paths as bare POSIX strings rather than `file://` URLs, which the previous clipboard reader missed

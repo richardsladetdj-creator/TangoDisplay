@@ -11,9 +11,25 @@ struct PlayingView: View {
         VStack(spacing: 16) {
             Spacer()
 
-            ForEach(profile.danceItemOrder, id: \.self) { item in
-                switch item {
-                case .genre:
+            ForEach(profile.danceItemOrder, id: \.self) { entry in
+                switch entry {
+                case .custom(let id):
+                    if let line = profile.customTextLines.first(where: { $0.id == id }), line.showInDance {
+                        let resolved = resolveCustomPlaceholders(line.text, track: state.currentTrack,
+                                                                 profile: profile, settings: settings)
+                        if !resolved.isEmpty {
+                            Text(resolved)
+                                .font(profile.font(name: line.fontName, size: line.fontSize,
+                                                   bold: line.fontBold, italic: line.fontItalic))
+                                .foregroundColor(Color(hex: line.colorHex))
+                                .multilineTextAlignment(.center)
+                                .lineLimit(Self.dynamicLineLimit(resolved))
+                                .minimumScaleFactor(0.5)
+                        }
+                    }
+                case .builtin(let item):
+                    switch item {
+                    case .genre:
                     if profile.showGenreDance, let genre = state.currentTrack?.genre, !genre.isEmpty {
                         Text(settings.displayLabel(for: genre).uppercased())
                             .font(profile.genreFont)
@@ -99,8 +115,9 @@ struct PlayingView: View {
                             .shadow(color: .black.opacity(0.6), radius: 4, x: 0, y: 1)
                             .multilineTextAlignment(.center)
                     }
-                case .cortinaLabel, .cortinaArtist, .cortinaTitle, .nextUpLabel:
-                    EmptyView()
+                    case .cortinaLabel, .cortinaArtist, .cortinaTitle, .nextUpLabel:
+                        EmptyView()
+                    }
                 }
             }
 

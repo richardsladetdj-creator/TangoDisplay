@@ -49,6 +49,33 @@ Use the **↑** and **↓** chevron buttons on the right of each row to move ite
 
 **Cortinas — Coming Up** items: Next Up Label, Genre, Artist, Year, Singer, Title, Last Tanda Label. The Next Up Label ("COMING UP" heading) is an orderable item — move it anywhere in the preview block.
 
+### Custom Lines
+
+Add your own free-text lines to the display, on top of the built-in fields. Each custom line is a template that can mix plain text with **placeholders** drawn from the playing (or upcoming) track's metadata.
+
+To add a line, click **Add Custom Line** in the Custom Lines section, then type a template, for example:
+
+```
+{Artist} {Year} ({Genre}) {Title} ({Singer})
+```
+
+**Available placeholders** (case-insensitive — `{Artist}` and `{artist}` both work):
+
+| Placeholder | Resolves to |
+|---|---|
+| `{Artist}` | Track artist |
+| `{Title}` | Track title |
+| `{Genre}` | Track genre |
+| `{Year}` | Track year |
+| `{Singer}` | The Singer field (from the source set in **Singer Source**) |
+| `{AlbumArtist}` | Album Artist tag |
+| `{Comment}` | Comments tag |
+| `{Grouping}` | Grouping tag |
+
+Any text outside the braces is shown verbatim, and an empty placeholder (e.g. a track with no year) simply collapses to nothing. Field values respect the same text transforms as the built-in fields.
+
+Each line has its own **font, size, bold/italic, and colour**, plus independent **Dance** and **Next Up** visibility toggles in **Field Visibility** above. New lines are added to both the **Dance Tracks** and **Cortinas — Coming Up** orderings, where they can be reordered among the built-in items like any other field.
+
 ---
 
 ## Text
