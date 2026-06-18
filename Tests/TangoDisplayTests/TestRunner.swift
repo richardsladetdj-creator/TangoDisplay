@@ -1036,8 +1036,42 @@ func runAudioUnitPluginTests() {
     }
 }
 
+func runSetlistOrderRulesTests() {
+    suite("SetlistOrderRules — played block stays a contiguous top prefix") {
+        test("firstUnplayedIndex finds the first not-played from the top") {
+            try expectEqual(SetlistOrderRules.firstUnplayedIndex(played: [true, true, false, true]), 2)
+            try expectEqual(SetlistOrderRules.firstUnplayedIndex(played: [false]), 0)
+            try expectNil(SetlistOrderRules.firstUnplayedIndex(played: [true, true]))
+        }
+
+        test("sanitizedUnplay allows only a contiguous run at the bottom of the played prefix") {
+            let played = [true, true, true, false, false]   // prefix length 3
+            try expectEqual(SetlistOrderRules.sanitizedUnplay(played: played, targets: [2]), [2])
+            try expectEqual(SetlistOrderRules.sanitizedUnplay(played: played, targets: [1, 2]), [1, 2])
+            try expectEqual(SetlistOrderRules.sanitizedUnplay(played: played, targets: [0, 1, 2]), [0, 1, 2])
+            // Selecting a middle/top entry without the ones below it would punch a hole → nothing.
+            try expectEqual(SetlistOrderRules.sanitizedUnplay(played: played, targets: [0]), [])
+            try expectEqual(SetlistOrderRules.sanitizedUnplay(played: played, targets: [0, 2]), [2])
+            // A not-played target is never un-played.
+            try expectEqual(SetlistOrderRules.sanitizedUnplay(played: played, targets: [3]), [])
+        }
+
+        test("sanitizedMarkPlayed allows only a contiguous extension of the played prefix") {
+            let played = [true, true, false, false, false]  // prefix length 2
+            try expectEqual(SetlistOrderRules.sanitizedMarkPlayed(played: played, targets: [2]), [2])
+            try expectEqual(SetlistOrderRules.sanitizedMarkPlayed(played: played, targets: [2, 3]), [2, 3])
+            // A gap below the boundary would create a played island → nothing.
+            try expectEqual(SetlistOrderRules.sanitizedMarkPlayed(played: played, targets: [3]), [])
+            try expectEqual(SetlistOrderRules.sanitizedMarkPlayed(played: played, targets: [3, 2]), [2, 3])
+            // An already-played target is never re-marked.
+            try expectEqual(SetlistOrderRules.sanitizedMarkPlayed(played: played, targets: [0]), [])
+        }
+    }
+}
+
 // MARK: - Main entry point
 
+runSetlistOrderRulesTests()
 runCortinaDetectorTests()
 runTandaTrackerTests()
 runProfileStoreTests()
