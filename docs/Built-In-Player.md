@@ -142,8 +142,8 @@ Right-click any row:
 
 | Action | What it does |
 |---|---|
-| **Mark as Played** | Stamps a queued track as played without playing it. Played tracks stay a contiguous block at the top, so only tracks directly below the played block can be marked — marking a lower track on its own does nothing |
-| **Mark as Not Played** | Resets a played track to queued so it will play again. Only tracks at the bottom edge of the played block can be reset, keeping the played block contiguous |
+| **Mark as Played** | Stamps a queued track as played without playing it |
+| **Mark as Not Played** | Resets a played track to queued so it will play again |
 | **Stop after Playing** | Sets a stop marker — playback halts automatically when this track finishes. Can also be set on the currently playing track. Shows as **Resume after Playing** when already set; click again to clear it. |
 | **Delete** | Removes the track from the setlist (asks for confirmation) |
 | **Ignore Auto-gap before this Track** | Disables auto-gap for this track only. Shows as **Resume Auto-gap** when already set; click again to re-enable it. |
