@@ -4,6 +4,22 @@
         <title>TangoDisplay</title>
         <link>https://github.com/richardsladetdj-creator/TangoDisplay</link>
         <item>
+            <title>Version 3.26.5</title>
+            <pubDate>Thu, 25 Jun 2026 08:42:28 +0000</pubDate>
+            <sparkle:version>102</sparkle:version>
+            <sparkle:shortVersionString>3.26.5</sparkle:shortVersionString>
+            <description><![CDATA[
+                <ul>
+                    <li>When <em>Hide Played</em> is on, a banner now shows how many played tracks are hidden.</li>
+                </ul>
+            ]]></description>
+            <enclosure
+                url="https://github.com/richardsladetdj-creator/TangoDisplay/releases/download/v3.26.5/TangoDisplay-v3.26.5-universal.zip"
+                sparkle:edSignature="DaIdh4ZKkpvuX39kYhbD80sobR8+SS9tVEbfgj0MMzT4O0I6gn/pBerF/wBi8wCefU/JcYU3rzQzfztVMu0QBw=="
+                length="6538011"
+                type="application/zip"/>
+        </item>
+        <item>
             <title>Version 3.26.4</title>
             <pubDate>Mon, 22 Jun 2026 06:07:38 +0000</pubDate>
             <sparkle:version>101</sparkle:version>
