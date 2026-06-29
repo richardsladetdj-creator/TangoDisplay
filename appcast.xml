@@ -4,6 +4,22 @@
         <title>TangoDisplay</title>
         <link>https://github.com/richardsladetdj-creator/TangoDisplay</link>
         <item>
+            <title>Version 3.26.6</title>
+            <pubDate>Mon, 29 Jun 2026 10:14:11 +0000</pubDate>
+            <sparkle:version>103</sparkle:version>
+            <sparkle:shortVersionString>3.26.6</sparkle:shortVersionString>
+            <description><![CDATA[
+                <ul>
+                    <li>Built-in player: fixed auto-gap silence sometimes applied to the wrong track after reordering, skipping, or marking tracks played.</li>
+                </ul>
+            ]]></description>
+            <enclosure
+                url="https://github.com/richardsladetdj-creator/TangoDisplay/releases/download/v3.26.6/TangoDisplay-v3.26.6-universal.zip"
+                sparkle:edSignature="W7LcWkUw7FAuTY42NX4UJqxJkNuPGZZGI2kPh1+iq0MLV8PKZvslTKR/HZL+likxsOR6F00U22fEaYR1aGYODA=="
+                length="6544272"
+                type="application/zip"/>
+        </item>
+        <item>
             <title>Version 3.26.5</title>
             <pubDate>Thu, 25 Jun 2026 08:42:28 +0000</pubDate>
             <sparkle:version>102</sparkle:version>
