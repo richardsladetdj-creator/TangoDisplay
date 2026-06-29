@@ -125,8 +125,8 @@ final class LocalPlayerSource: NSObject, ObservableObject, MusicPlayerSource {
     // MARK: - Private — auto-gap
 
     private var currentPaddingFrames: AVAudioFrameCount = 0
-    private var prevTrackSilenceAtEnd: Double = 0   // populated by background analysis of the track that just played
-    private var nextTrackSilenceAtStart: Double = 0 // populated by background analysis of the upcoming track
+    private var preparedAutoGap: PreparedAutoGap?     // silence analysis bound to a specific (current, next) transition
+    private var autoGapAnalysisTask: Task<Void, Never>?
     private var audioStartSampleTime: AVAudioFramePosition = 0
     private var silencePending: Bool = false
 
@@ -558,8 +558,8 @@ final class LocalPlayerSource: NSObject, ObservableObject, MusicPlayerSource {
         currentPaddingFrames = 0
         silencePending = false
         audioStartSampleTime = 0
-        prevTrackSilenceAtEnd = 0
-        nextTrackSilenceAtStart = 0
+        autoGapAnalysisTask?.cancel()
+        preparedAutoGap = nil
         teardownObservers()
     }
 
@@ -672,8 +672,8 @@ final class LocalPlayerSource: NSObject, ObservableObject, MusicPlayerSource {
         currentPaddingFrames = 0
         silencePending = false
         audioStartSampleTime = 0
-        prevTrackSilenceAtEnd = 0
-        nextTrackSilenceAtStart = 0
+        autoGapAnalysisTask?.cancel()
+        preparedAutoGap = nil
         reportCurrentState()
         reportPlaylist()
         onNextTrackUpdate?(nil)
@@ -820,7 +820,7 @@ final class LocalPlayerSource: NSObject, ObservableObject, MusicPlayerSource {
             }
 
             // Auto-gap: schedule silence before the file if needed.
-            // nextTrackSilenceAtStart is pre-populated by the background analysis from the previous track's loadEntry.
+            // preparedAutoGap is pre-populated by the background analysis from the previous track's loadEntry.
             currentPaddingFrames = 0
             silencePending = false
             audioStartSampleTime = 0
@@ -832,11 +832,14 @@ final class LocalPlayerSource: NSObject, ObservableObject, MusicPlayerSource {
                 if settings.autoGapIgnoreFirstTrack && isFirstTrack {
                     autoGapSkipped = true
                 } else {
-                    let padding = computeAutoGapPadding(
-                        prevSilenceAtEnd: prevTrackSilenceAtEnd,
-                        nextSilenceAtStart: nextTrackSilenceAtStart,
-                        minimumSilence: settings.autoGapDuration
-                    )
+                    // Use the analysis prepared for this exact (outgoing, incoming) pair.
+                    // currentEntryID still holds the outgoing track here (set to the new
+                    // entry below). A stale/mismatched pair → nil → conservative full target.
+                    let padding = preparedAutoGap?.injectedDuration(
+                        currentID: currentEntryID ?? entry.id,
+                        nextID: entry.id,
+                        target: settings.autoGapDuration
+                    ) ?? settings.autoGapDuration
                     if padding > 0 {
                         let frames = AVAudioFrameCount(padding * file.fileFormat.sampleRate)
                         silencePending = true
@@ -862,28 +865,41 @@ final class LocalPlayerSource: NSObject, ObservableObject, MusicPlayerSource {
             }
             setlist.setAutoGapApplied(id: entry.id, applied: autoGapApplied)
             setlist.setAutoGapSkipped(id: entry.id, skipped: autoGapSkipped)
-            prevTrackSilenceAtEnd = 0
-            nextTrackSilenceAtStart = 0
+            preparedAutoGap = nil
 
             playerNode.scheduleFile(file, at: nil, completionCallbackType: .dataPlayedBack) { [weak self] _ in
                 DispatchQueue.main.async { self?.handleTrackEnd(generation: gen) }
             }
 
-            // Analyze current track's end-silence and pre-warm next track's start-silence in background.
+            // Pre-warm silence analysis for the next automatic transition, bound to the
+            // exact (current, next) pair. Analyze firstUnplayed(after:) — the real
+            // transition target — not the immediate neighbour, which may be played.
+            autoGapAnalysisTask?.cancel()
+            let currentID = entry.id
+            let next = setlist.firstUnplayed(after: entry.id)
             let currentURL = entry.fileURL
-            let nextURL = setlist.entry(after: entry.id)?.fileURL
-            Task { [weak self] in
-                let result = await AudioSilenceAnalyzer.shared.analyze(url: currentURL)
-                let nextStart: Double
+            let nextURL = next?.fileURL
+            let nextID = next?.id
+            autoGapAnalysisTask = Task { [weak self] in
+                let cur = await AudioSilenceAnalyzer.shared.analyze(url: currentURL)
+                guard !Task.isCancelled else { return }
+                let lead: Double
                 if let nextURL {
-                    let nextResult = await AudioSilenceAnalyzer.shared.analyze(url: nextURL)
-                    nextStart = nextResult.silenceAtStart
+                    lead = await AudioSilenceAnalyzer.shared.analyze(url: nextURL).silenceAtStart
                 } else {
-                    nextStart = 0
+                    lead = 0
                 }
+                guard !Task.isCancelled, let nextID else { return }
                 await MainActor.run { [weak self] in
-                    self?.prevTrackSilenceAtEnd = result.silenceAtEnd
-                    self?.nextTrackSilenceAtStart = nextStart
+                    guard let self,
+                          self.currentEntryID == currentID,
+                          self.setlist.firstUnplayed(after: currentID)?.id == nextID else { return }
+                    self.preparedAutoGap = PreparedAutoGap(
+                        currentID: currentID,
+                        nextID: nextID,
+                        trailing: cur.silenceAtEnd,
+                        leading: lead
+                    )
                 }
             }
         } catch {
@@ -916,16 +932,6 @@ final class LocalPlayerSource: NSObject, ObservableObject, MusicPlayerSource {
     private func handleTrackEnd(generation: Int) {
         guard generation == scheduleGeneration else { return }
         skipNext()
-    }
-
-    private func computeAutoGapPadding(
-        prevSilenceAtEnd: Double,
-        nextSilenceAtStart: Double,
-        minimumSilence: Double
-    ) -> Double {
-        guard minimumSilence > 0 else { return 0 }
-        let existing = prevSilenceAtEnd + nextSilenceAtStart
-        return max(0, minimumSilence - existing)
     }
 
     private func makeSilenceBuffer(format: AVAudioFormat, frameCount: AVAudioFrameCount) -> AVAudioPCMBuffer {

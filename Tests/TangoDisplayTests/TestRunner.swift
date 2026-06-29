@@ -1036,8 +1036,35 @@ func runAudioUnitPluginTests() {
     }
 }
 
+func runPreparedAutoGapTests() {
+    let a = UUID(), b = UUID(), c = UUID()
+    suite("PreparedAutoGap — pair-bound injected silence") {
+        let prep = PreparedAutoGap(currentID: a, nextID: b, trailing: 1, leading: 1)
+        test("matching pair subtracts intrinsic silence") {
+            try expectEqual(prep.injectedDuration(currentID: a, nextID: b, target: 5), 3)
+        }
+        test("intrinsic silence at or above target injects zero") {
+            let p = PreparedAutoGap(currentID: a, nextID: b, trailing: 3, leading: 2)
+            try expectEqual(p.injectedDuration(currentID: a, nextID: b, target: 5), 0)
+        }
+        test("mismatched currentID rejects as stale") {
+            try expectNil(prep.injectedDuration(currentID: c, nextID: b, target: 5))
+        }
+        test("mismatched nextID rejects as stale") {
+            try expectNil(prep.injectedDuration(currentID: a, nextID: c, target: 5))
+        }
+        test("negative and non-finite measurements clamp") {
+            let p = PreparedAutoGap(currentID: a, nextID: b, trailing: -1, leading: .nan)
+            try expectEqual(p.injectedDuration(currentID: a, nextID: b, target: 5), 5)
+            let q = PreparedAutoGap(currentID: a, nextID: b, trailing: 1, leading: 1)
+            try expectEqual(q.injectedDuration(currentID: a, nextID: b, target: .infinity), 0)
+        }
+    }
+}
+
 // MARK: - Main entry point
 
+runPreparedAutoGapTests()
 runCortinaDetectorTests()
 runTandaTrackerTests()
 runProfileStoreTests()

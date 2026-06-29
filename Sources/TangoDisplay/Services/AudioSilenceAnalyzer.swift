@@ -13,14 +13,15 @@ actor AudioSilenceAnalyzer {
     private var cache: [URL: Result] = [:]
 
     func analyze(url: URL) async -> Result {
-        if let cached = cache[url] { return cached }
-        let result = Self.analyzeFile(url: url)
-        cache[url] = result
+        let key = url.standardizedFileURL
+        if let cached = cache[key] { return cached }
+        let result = Self.analyzeFile(url: key)
+        cache[key] = result
         return result
     }
 
     func invalidate(url: URL) {
-        cache.removeValue(forKey: url)
+        cache.removeValue(forKey: url.standardizedFileURL)
     }
 
     func clearCache() {
