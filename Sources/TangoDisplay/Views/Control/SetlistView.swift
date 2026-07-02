@@ -498,6 +498,7 @@ struct SetlistView: View {
     @State private var showPluginChainPopover = false
     @State private var scrollTrigger: UUID? = nil
     @State private var showLastTandaWarning = false
+    @State private var pendingRepeatID: UUID?
     @State private var pasteMonitor: Any? = nil
     @State private var hogConflictWarning = false
     @State private var hogDeviceStolenAlertShown = false
@@ -788,6 +789,17 @@ struct SetlistView: View {
         } message: {
             Text("Set the Last Tanda label text in Appearance Settings before marking a Last Tanda.")
         }
+        .alert("Track Set to Stop after Playing",
+               isPresented: Binding(get: { pendingRepeatID != nil },
+                                    set: { if !$0 { pendingRepeatID = nil } })) {
+            Button("Repeat Instead") {
+                if let id = pendingRepeatID { setlist.setRepeat(true, for: id) }
+                pendingRepeatID = nil
+            }
+            Button("Cancel", role: .cancel) { pendingRepeatID = nil }
+        } message: {
+            Text("This track is marked Stop after Playing. Remove that and repeat it instead?")
+        }
     }
 
     // MARK: - Empty state
@@ -937,14 +949,15 @@ struct SetlistView: View {
     private var trackList: some View {
         let firstID = setlist.entries.first?.id
         let nonePlayedYet = !setlist.entries.contains(where: { $0.state == .played })
-        let isIgnoringFirstTrack = settings.autoGapEnabled && settings.autoGapIgnoreFirstTrack
         let entries = settings.hidePlayed
             ? setlist.entries.filter { $0.state != .played || $0.id == activeEntryID }
             : setlist.entries
         return List(selection: $selectedIDs) {
             ForEach(entries) { entry in
-                let wouldSkipAutoGap = isIgnoringFirstTrack && nonePlayedYet && entry.state == .queued && entry.id == firstID
-                rowView(for: entry, wouldSkipAutoGap: wouldSkipAutoGap)
+                let autoGapIgnored = settings.autoGapEnabled &&
+                    entry.autoGapIgnored(isFirstTrack: nonePlayedYet && entry.id == firstID,
+                                         ignoreFirstTrack: settings.autoGapIgnoreFirstTrack)
+                rowView(for: entry, wouldSkipAutoGap: autoGapIgnored)
             }
             .onMove { source, dest in
                 // The ForEach iterates `entries` (filtered when Hide Played is on),
@@ -1022,14 +1035,23 @@ struct SetlistView: View {
             Divider()
             if e.state != .played || e.id == player.currentEntryID {
                 Button {
-                    setlist.stopAfterEntryID = (setlist.stopAfterEntryID == id) ? nil : id
+                    if setlist.stopAfterEntryID == id {
+                        setlist.stopAfterEntryID = nil
+                    } else {
+                        setlist.stopAfterEntryID = id
+                        setlist.setRepeat(false, for: id)   // stop-after supersedes repeat
+                    }
                 } label: {
                     Text(setlist.stopAfterEntryID == id ? "Resume after Playing" : "Stop after Playing")
                 }
             }
             if e.state == .queued || e.state == .paused {
-                Button(e.ignoresAutoGap ? "Resume Auto-gap" : "Ignore Auto-gap before this Track") {
-                    setlist.toggleIgnoresAutoGap(id: id)
+                let nonePlayed = !setlist.entries.contains { $0.state == .played }
+                let eff = settings.autoGapEnabled &&
+                    e.autoGapIgnored(isFirstTrack: nonePlayed && e.id == setlist.entries.first?.id,
+                                     ignoreFirstTrack: settings.autoGapIgnoreFirstTrack)
+                Button(eff ? "Resume Auto-gap" : "Ignore Auto-gap before this Track") {
+                    setlist.setAutoGapOverride(id: id, ignore: !eff)
                 }
             }
         }
@@ -1061,6 +1083,13 @@ struct SetlistView: View {
                     showLastTandaWarning = true
                 } else {
                     appState.setLastTanda(id: id, value: !e.isLastTanda)
+                }
+            }
+            Button(e.repeatTrack ? "Stop Repeating" : "Repeat Track") {
+                if !e.repeatTrack && setlist.stopAfterEntryID == id {
+                    pendingRepeatID = id
+                } else {
+                    setlist.setRepeat(!e.repeatTrack, for: id)
                 }
             }
         }
@@ -1597,11 +1626,16 @@ struct SetlistRowView: View {
                         .font(.system(size: 11))
                         .foregroundColor(.orange)
                 }
+                if entry.repeatTrack {
+                    Image(systemName: "repeat")
+                        .font(.system(size: 11))
+                        .foregroundColor(.blue)
+                }
                 if entry.autoGapApplied {
                     Image(systemName: "wave.3.left.circle.fill")
                         .font(.system(size: 11))
                         .foregroundColor(.green)
-                } else if entry.ignoresAutoGap || entry.autoGapSkipped || wouldSkipAutoGap {
+                } else if wouldSkipAutoGap {
                     Image(systemName: "wave.3.left.circle")
                         .font(.system(size: 11))
                         .foregroundColor(.secondary)

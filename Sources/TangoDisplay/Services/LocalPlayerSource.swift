@@ -684,6 +684,14 @@ final class LocalPlayerSource: NSObject, ObservableObject, MusicPlayerSource {
         let finishedEntry = setlist.entries.first(where: { $0.id == id })
         let stopForPerformance = (finishedEntry?.isPerformance == true) && settings.stopAfterEachPerformanceTrack
         let shouldStop = (id == setlist.stopAfterEntryID) || stopForPerformance
+        // Repeat: loop the same non-dance track (stop-after wins via shouldStop above)
+        if !shouldStop, finishedEntry?.repeatTrack == true, let entry = finishedEntry {
+            loadEntry(entry, bypassAutoGap: true)
+            playerNode.play()
+            isActivePlaying = true
+            reportCurrentState()
+            return
+        }
         setlist.markPlayed(id: id)
         if id == setlist.stopAfterEntryID { setlist.stopAfterEntryID = nil }
         if !shouldStop, let next = setlist.firstUnplayed(after: id) {
@@ -711,6 +719,14 @@ final class LocalPlayerSource: NSObject, ObservableObject, MusicPlayerSource {
         let finishedEntry = setlist.entries.first(where: { $0.id == id })
         let stopForPerformance = (finishedEntry?.isPerformance == true) && settings.stopAfterEachPerformanceTrack
         let shouldStop = (id == setlist.stopAfterEntryID) || stopForPerformance
+        // Repeat: loop the same non-dance track (stop-after wins via shouldStop above)
+        if !shouldStop, finishedEntry?.repeatTrack == true, let entry = finishedEntry {
+            loadEntry(entry, bypassAutoGap: true)
+            playerNode.play()
+            isActivePlaying = true
+            reportCurrentState()
+            return
+        }
         setlist.markPlayed(id: id)
         if id == setlist.stopAfterEntryID { setlist.stopAfterEntryID = nil }
         if !shouldStop, let next = setlist.firstUnplayed(after: id) {
@@ -827,44 +843,40 @@ final class LocalPlayerSource: NSObject, ObservableObject, MusicPlayerSource {
             let isFirstTrack = setlist.entries.first?.id == entry.id
                 && !setlist.entries.contains(where: { $0.state == .played })
             var autoGapApplied = false
-            var autoGapSkipped = false
-            if !bypassAutoGap && !entry.ignoresAutoGap && settings.autoGapEnabled {
-                if settings.autoGapIgnoreFirstTrack && isFirstTrack {
-                    autoGapSkipped = true
-                } else {
-                    // Use the analysis prepared for this exact (outgoing, incoming) pair.
-                    // currentEntryID still holds the outgoing track here (set to the new
-                    // entry below). A stale/mismatched pair → nil → conservative full target.
-                    let padding = preparedAutoGap?.injectedDuration(
-                        currentID: currentEntryID ?? entry.id,
-                        nextID: entry.id,
-                        target: settings.autoGapDuration
-                    ) ?? settings.autoGapDuration
-                    if padding > 0 {
-                        let frames = AVAudioFrameCount(padding * file.fileFormat.sampleRate)
-                        silencePending = true
-                        let entryID = entry.id
-                        playerNode.scheduleBuffer(
-                            makeSilenceBuffer(format: file.processingFormat, frameCount: frames),
-                            completionCallbackType: .dataConsumed
-                        ) { [weak self] _ in
-                            DispatchQueue.main.async {
-                                guard let self,
-                                      let nodeTime = self.playerNode.lastRenderTime,
-                                      nodeTime.isSampleTimeValid,
-                                      let pt = self.playerNode.playerTime(forNodeTime: nodeTime) else { return }
-                                self.audioStartSampleTime = pt.sampleTime
-                                self.silencePending = false
-                                self.setlist.setAutoGapApplied(id: entryID, applied: false)
-                            }
+            let autoGapIgnored = entry.autoGapIgnored(isFirstTrack: isFirstTrack,
+                                                      ignoreFirstTrack: settings.autoGapIgnoreFirstTrack)
+            if !bypassAutoGap && !autoGapIgnored && settings.autoGapEnabled {
+                // Use the analysis prepared for this exact (outgoing, incoming) pair.
+                // currentEntryID still holds the outgoing track here (set to the new
+                // entry below). A stale/mismatched pair → nil → conservative full target.
+                let padding = preparedAutoGap?.injectedDuration(
+                    currentID: currentEntryID ?? entry.id,
+                    nextID: entry.id,
+                    target: settings.autoGapDuration
+                ) ?? settings.autoGapDuration
+                if padding > 0 {
+                    let frames = AVAudioFrameCount(padding * file.fileFormat.sampleRate)
+                    silencePending = true
+                    let entryID = entry.id
+                    playerNode.scheduleBuffer(
+                        makeSilenceBuffer(format: file.processingFormat, frameCount: frames),
+                        completionCallbackType: .dataConsumed
+                    ) { [weak self] _ in
+                        DispatchQueue.main.async {
+                            guard let self,
+                                  let nodeTime = self.playerNode.lastRenderTime,
+                                  nodeTime.isSampleTimeValid,
+                                  let pt = self.playerNode.playerTime(forNodeTime: nodeTime) else { return }
+                            self.audioStartSampleTime = pt.sampleTime
+                            self.silencePending = false
+                            self.setlist.setAutoGapApplied(id: entryID, applied: false)
                         }
-                        currentPaddingFrames = frames
-                        autoGapApplied = true
                     }
+                    currentPaddingFrames = frames
+                    autoGapApplied = true
                 }
             }
             setlist.setAutoGapApplied(id: entry.id, applied: autoGapApplied)
-            setlist.setAutoGapSkipped(id: entry.id, skipped: autoGapSkipped)
             preparedAutoGap = nil
 
             playerNode.scheduleFile(file, at: nil, completionCallbackType: .dataPlayedBack) { [weak self] _ in

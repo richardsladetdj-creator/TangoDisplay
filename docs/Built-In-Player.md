@@ -69,6 +69,7 @@ Each row shows:
 | Duration | Optional — toggle in Player Settings |
 | Comments / Album Artist | Optional — toggle in Player Settings |
 | Stop marker | Small stop icon when "Stop After This Track" is set |
+| Repeat icon | Blue repeat icon when the track is set to Repeat |
 | Auto-gap icon | Filled green wave = auto-gap silence applied before this track · Outlined grey wave = skipped or ignored |
 | Last Tanda flag | Red flag icon = this cortina is marked as the last tanda and will activate the Last Tanda label when it plays |
 | Tag colour dot | Coloured dot on the left edge of the row when a tag colour has been assigned (see [Track Tags](#track-tags) below) |
@@ -147,7 +148,8 @@ Right-click any row:
 |---|---|
 | **Mark as Played** | Stamps a queued track as played without playing it |
 | **Mark as Not Played** | Resets a played track to queued so it will play again |
-| **Stop after Playing** | Sets a stop marker — playback halts automatically when this track finishes. Can also be set on the currently playing track. Shows as **Resume after Playing** when already set; click again to clear it. |
+| **Stop after Playing** | Sets a stop marker — playback halts automatically when this track finishes. Can also be set on the currently playing track. Shows as **Resume after Playing** when already set; click again to clear it. Setting it clears any Repeat on the same track. |
+| **Repeat Track** | Loops a non-dance track — it replays continuously until you clear the repeat or it hits a stop-after marker. A blue repeat icon appears on the row. Shows as **Stop Repeating** when already set. Mutually exclusive with Stop after Playing (marking Repeat on a stop-after track prompts to switch). Any fade action (Fade & Stop, Fade & Continue, auto-fade) clears the repeat. |
 | **Delete** | Removes the track from the setlist (asks for confirmation) |
 | **Ignore Auto-gap before this Track** | Disables auto-gap for this track only. Shows as **Resume Auto-gap** when already set; click again to re-enable it. |
 | **Skip Auto-fade** | Disables auto-fade for this cortina track only, re-enabling the Fade & Stop and Fade & Continue buttons for manual control. Available only when Auto-fade is enabled and fading has not yet started. |
@@ -214,6 +216,8 @@ When **Skip gap before first track** is enabled (the default), the opening track
 ### Per-Track Override
 
 Right-click any queued track row and select **Ignore Auto-gap before this Track** to exempt that individual track. The option becomes **Resume Auto-gap** when already set; click it again to re-enable. This lets you keep auto-gap active globally while skipping it for specific tracks (e.g. a track you want to follow immediately after its predecessor).
+
+The override reflects the track's *effective* state, so it works even on the first track: when **Skip gap before first track** is auto-applying the skip, the option reads **Resume Auto-gap** and selecting it forces the gap back on for that track.
 
 ### Pausing and Resuming
 

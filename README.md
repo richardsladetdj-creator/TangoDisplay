@@ -49,7 +49,7 @@ A native macOS menu-bar app that shows a clean, fullscreen dancer display on an 
 ### Option A — Download pre-built app (easiest)
 
 1. Go to the [Releases](https://github.com/richardsladetdj-creator/TangoDisplay/releases) page
-2. Download `TangoDisplay-v3.26.6-universal.zip` (works on both Apple Silicon and Intel Macs)
+2. Download `TangoDisplay-v3.27.0-universal.zip` (works on both Apple Silicon and Intel Macs)
 3. Unzip and drag `TangoDisplay.app` to your `/Applications` folder
 4. **Right-click › Open** on first launch (required because the app is ad-hoc signed, not notarised)
 5. Grant the permissions macOS requests (see [Permissions](#permissions) below)
@@ -135,6 +135,10 @@ Key design decisions:
 ---
 
 ## Changelog
+
+### v3.27.0
+- **Repeat Track (Built-in Player):** mark a non-dance track to repeat until 'stop-after' or un-marked. Blue repeat icon, context-menu toggle, mutually exclusive with stop-after (confirm alert), cleared by fade actions.
+- **Fixed (Built-in Player):** context menu now correctly resumes auto-gap on the first track when auto-gap is auto-applied by the global setting.
 
 ### v3.26.6
 - **Fixed (Built-in Player):** auto-gap silence could be applied to the wrong track after reordering, skipping, or marking tracks played; silence analysis is now bound to the exact track transition
