@@ -1093,6 +1093,19 @@ struct SetlistView: View {
                 }
             }
         }
+        // Track start & end time: single track, built-in player only (only it can enforce the trim)
+        if targets.count == 1, let id = targets.first,
+           let e = setlist.entries.first(where: { $0.id == id }),
+           appState.localPlayer != nil {
+            Divider()
+            Button("Track Start & End Time…") {
+                appState.trimEditorEntryID = id
+                openWindow(id: "trackTiming")
+            }
+            if e.trimStartSeconds != nil || e.trimEndSeconds != nil {
+                Button("Clear Start & End Time") { setlist.clearTrim(for: id) }
+            }
+        }
         // Performance: available for any non-fully-played track(s)
         let performanceTargets = targets.filter { id in
             guard let e = setlist.entries.first(where: { $0.id == id }) else { return false }
@@ -1659,6 +1672,15 @@ struct SetlistRowView: View {
                         .background(Color.purple.opacity(0.12))
                         .clipShape(Capsule())
                 }
+                if entry.trimStartSeconds != nil || entry.trimEndSeconds != nil {
+                    Label(trimBadgeText, systemImage: "timeline.selection")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundColor(.blue)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background(Color.blue.opacity(0.12))
+                        .clipShape(Capsule())
+                }
             }
             .padding(.top, 3)
             .padding(.bottom, isCurrent && player != nil ? 2 : 3)
@@ -1672,6 +1694,15 @@ struct SetlistRowView: View {
         }
         .contentShape(Rectangle())
         .listRowBackground(rowBackground)
+    }
+
+    private var trimBadgeText: String {
+        func fmt(_ s: Double) -> String {
+            let i = Int(max(0, s).rounded()); return String(format: "%d:%02d", i / 60, i % 60)
+        }
+        let start = entry.trimStartSeconds ?? 0
+        let end = entry.trimEndSeconds ?? entry.duration ?? 0
+        return "\(fmt(start))–\(fmt(end))"
     }
 
     private var genreTagColor: Color {

@@ -26,6 +26,9 @@ final class AppState: ObservableObject {
     /// persistentID of the track whose artwork is currently displayed; drives transition identity.
     @Published private(set) var displayedArtworkTrackID: String? = nil
 
+    /// Entry the "Track start & end time" editor window operates on (right-clicked entry).
+    @Published var trimEditorEntryID: UUID? = nil
+
     // MARK: - Window actions (set by ControlView; used by MenuBarController)
 
     /// Stored by ControlView so non-SwiftUI code can reopen the presentation window.

@@ -150,6 +150,7 @@ Right-click any row:
 | **Mark as Not Played** | Resets a played track to queued so it will play again |
 | **Stop after Playing** | Sets a stop marker — playback halts automatically when this track finishes. Can also be set on the currently playing track. Shows as **Resume after Playing** when already set; click again to clear it. Setting it clears any Repeat on the same track. |
 | **Repeat Track** | Loops a non-dance track — it replays continuously until you clear the repeat or it hits a stop-after marker. A blue repeat icon appears on the row. Shows as **Stop Repeating** when already set. Mutually exclusive with Stop after Playing (marking Repeat on a stop-after track prompts to switch). Any fade action (Fade & Stop, Fade & Continue, auto-fade) clears the repeat. |
+| **Track Start & End Time…** | Opens an editor to trim playback to a sub-range of the track, so you can replay it from a mid-point (e.g. during applause after a performance). Works on any track. Shows a blue start–end badge on the row once set, and **Clear Start & End Time** to remove it. See [Track Start & End Time](#track-start--end-time) below. Built-in player only. |
 | **Delete** | Removes the track from the setlist (asks for confirmation) |
 | **Ignore Auto-gap before this Track** | Disables auto-gap for this track only. Shows as **Resume Auto-gap** when already set; click again to re-enable it. |
 | **Skip Auto-fade** | Disables auto-fade for this cortina track only, re-enabling the Fade & Stop and Fade & Continue buttons for manual control. Available only when Auto-fade is enabled and fading has not yet started. |
@@ -350,6 +351,25 @@ The window displays:
 - **Elapsed / total time** — shown at the left and right of the waveform.
 
 Waveform data is computed from the audio file on demand and cached so subsequent plays load instantly. The button is enabled whenever tracks are loaded in the setlist.
+
+---
+
+## Track Start & End Time
+
+Sometimes you want to replay a track from part-way through — for example while a performing couple take an applause. **Track Start & End Time** lets you trim any track (dance or cortina) to a sub-range so playback starts and stops where you choose.
+
+Right-click a row and select **Track Start & End Time…** to open the editor window. It shows the track's waveform with two controls for setting the range:
+
+- **Drag the handles** — a green handle at the start and a red handle at the end of the waveform. The part of the waveform outside your selection is dulled so the chosen range stands out.
+- **Type the times** — enter a **Start** and **End** time manually in `m:ss` format. The end time cannot be earlier than the start.
+
+Click **Apply** to save (or **Cancel** to discard). The row then shows a blue **start–end** badge. To remove the trim, right-click the row and choose **Clear Start & End Time**.
+
+Notes:
+
+- Playback begins at the start time and stops at the end time, then advances as normal.
+- Combine with **Repeat Track** to loop just the trimmed range continuously.
+- This is enforced by the built-in player only, so the menu action appears when the built-in player is the active source.
 
 ---
 

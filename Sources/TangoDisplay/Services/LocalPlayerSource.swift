@@ -879,8 +879,23 @@ final class LocalPlayerSource: NSObject, ObservableObject, MusicPlayerSource {
             setlist.setAutoGapApplied(id: entry.id, applied: autoGapApplied)
             preparedAutoGap = nil
 
-            playerNode.scheduleFile(file, at: nil, completionCallbackType: .dataPlayedBack) { [weak self] _ in
-                DispatchQueue.main.async { self?.handleTrackEnd(generation: gen) }
+            if entry.trimStartSeconds != nil || entry.trimEndSeconds != nil {
+                // Trim: play only [start, end]. Repeat re-loads this entry, so it re-schedules
+                // from startF; duration stays full-file so waveform/progress map to absolute time.
+                let sr = file.fileFormat.sampleRate
+                let startF = AVAudioFramePosition(max(0, (entry.trimStartSeconds ?? 0)) * sr)
+                let endF = AVAudioFramePosition(min(duration, entry.trimEndSeconds ?? duration) * sr)
+                seekOffset = Double(startF) / sr
+                elapsed = seekOffset
+                let count = AVAudioFrameCount(max(0, endF - startF))
+                playerNode.scheduleSegment(file, startingFrame: startF, frameCount: count,
+                                           at: nil, completionCallbackType: .dataPlayedBack) { [weak self] _ in
+                    DispatchQueue.main.async { self?.handleTrackEnd(generation: gen) }
+                }
+            } else {
+                playerNode.scheduleFile(file, at: nil, completionCallbackType: .dataPlayedBack) { [weak self] _ in
+                    DispatchQueue.main.async { self?.handleTrackEnd(generation: gen) }
+                }
             }
 
             // Pre-warm silence analysis for the next automatic transition, bound to the

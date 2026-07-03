@@ -26,10 +26,12 @@ struct SetlistEntry: Identifiable, Codable {
     var repeatTrack: Bool = false      // non-dance track loops until stop-after or un-marked
     var pluginConfigurationID: UUID? = nil
     var tagColor: TagColor = .none
+    var trimStartSeconds: Double? = nil   // nil = play from file start
+    var trimEndSeconds: Double? = nil      // nil = play to file end
     var autoGapApplied: Bool = false   // transient: true while auto-gap preroll is scheduled before this track
 
     enum CodingKeys: String, CodingKey {
-        case id, fileURL, track, state, duration, autoGapOverride, ignoresAutoFade, isLastTanda, isPerformance, repeatTrack, pluginConfigurationID, tagColor
+        case id, fileURL, track, state, duration, autoGapOverride, ignoresAutoFade, isLastTanda, isPerformance, repeatTrack, pluginConfigurationID, tagColor, trimStartSeconds, trimEndSeconds
         // autoGapApplied is intentionally excluded — reset each playback session
     }
 
@@ -67,6 +69,8 @@ struct SetlistEntry: Identifiable, Codable {
         repeatTrack = try c.decodeIfPresent(Bool.self, forKey: .repeatTrack) ?? false
         pluginConfigurationID = try c.decodeIfPresent(UUID.self, forKey: .pluginConfigurationID) ?? nil
         tagColor = try c.decodeIfPresent(TagColor.self, forKey: .tagColor) ?? .none
+        trimStartSeconds = try c.decodeIfPresent(Double.self, forKey: .trimStartSeconds)
+        trimEndSeconds = try c.decodeIfPresent(Double.self, forKey: .trimEndSeconds)
         autoGapApplied = false
     }
 }
@@ -249,6 +253,15 @@ final class SetlistManager: ObservableObject {
         if value && stopAfterEntryID == id { stopAfterEntryID = nil }
         save()
     }
+
+    func setTrim(start: Double?, end: Double?, for id: UUID) {
+        guard let i = entries.firstIndex(where: { $0.id == id }) else { return }
+        entries[i].trimStartSeconds = start
+        entries[i].trimEndSeconds = end
+        save()
+    }
+
+    func clearTrim(for id: UUID) { setTrim(start: nil, end: nil, for: id) }
 
     func setPluginConfiguration(_ configID: UUID?, for ids: Set<UUID>) {
         for id in ids {
