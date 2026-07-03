@@ -4,6 +4,24 @@
         <title>TangoDisplay</title>
         <link>https://github.com/richardsladetdj-creator/TangoDisplay</link>
         <item>
+            <title>Version 3.28.0</title>
+            <pubDate>Fri, 03 Jul 2026 15:46:28 +0000</pubDate>
+            <sparkle:version>105</sparkle:version>
+            <sparkle:shortVersionString>3.28.0</sparkle:shortVersionString>
+            <description><![CDATA[
+                <ul>
+                    <li>Track Start &amp; End Time: new context-menu action to trim any track's playback to a sub-range, so you can replay a track from a mid-point (e.g. during applause after a performance).</li>
+                    <li>Editor window with draggable start/end handles over the waveform (dulled outside the selection) plus manual m:ss entry. Trimmed tracks show a start-end badge; Clear Start &amp; End Time removes it.</li>
+                    <li>Works with Repeat Track (loops the trimmed range). Built-in player only.</li>
+                </ul>
+            ]]></description>
+            <enclosure
+                url="https://github.com/richardsladetdj-creator/TangoDisplay/releases/download/v3.28.0/TangoDisplay-v3.28.0-universal.zip"
+                sparkle:edSignature="jnvkXFOvwA37MbGnD9cCTaAVDydaaQAXetEEwbkl4/1TrsUwI+JJajx85JjCC5wyC148kmd+Q9e5AwaX4IMeBA=="
+                length="6638267"
+                type="application/zip"/>
+        </item>
+        <item>
             <title>Version 3.27.0</title>
             <pubDate>Thu, 02 Jul 2026 10:32:02 +0000</pubDate>
             <sparkle:version>104</sparkle:version>
