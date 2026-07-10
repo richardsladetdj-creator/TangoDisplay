@@ -4,6 +4,22 @@
         <title>TangoDisplay</title>
         <link>https://github.com/richardsladetdj-creator/TangoDisplay</link>
         <item>
+            <title>Version 3.28.1</title>
+            <pubDate>Fri, 10 Jul 2026 07:26:46 +0000</pubDate>
+            <sparkle:version>106</sparkle:version>
+            <sparkle:shortVersionString>3.28.1</sparkle:shortVersionString>
+            <description><![CDATA[
+                <ul>
+                    <li>Fixed a crash (JRiver): rapidly rebuilding or re-picking the Playing Now list could momentarily leave JRiver without a valid playing position, which crashed TangoDisplay while showing the next track during a cortina. The playlist position is now clamped safely.</li>
+                </ul>
+            ]]></description>
+            <enclosure
+                url="https://github.com/richardsladetdj-creator/TangoDisplay/releases/download/v3.28.1/TangoDisplay-v3.28.1-universal.zip"
+                sparkle:edSignature="IqH9EyrFzKNSNX2mtHbyiUXxl8vKUGwfnyjdMETYwmcoDlTDBvpaKeDg9tFhulxI9s+3ZTu4SQUbnKv7pGwEDA=="
+                length="6638278"
+                type="application/zip"/>
+        </item>
+        <item>
             <title>Version 3.28.0</title>
             <pubDate>Fri, 03 Jul 2026 15:46:28 +0000</pubDate>
             <sparkle:version>105</sparkle:version>
