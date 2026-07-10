@@ -17,6 +17,7 @@ TangoDisplay is a native macOS menu-bar app for tango DJs. Connect it to Music.a
 | [Appearance](Appearance) | Colors, fonts, background image, and transitions |
 | [Display Settings](Display-Settings) | Monitor selection, mirror mode, and display labels |
 | [Profiles](Profiles) | Saving and switching appearance profiles |
+| [Copying Customisations Between Macs](Copying-Customisations-Between-Macs) | Moving your settings, profiles, images, and presets to a second Mac |
 
 ---
 
