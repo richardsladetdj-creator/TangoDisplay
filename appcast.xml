@@ -4,6 +4,24 @@
         <title>TangoDisplay</title>
         <link>https://github.com/richardsladetdj-creator/TangoDisplay</link>
         <item>
+            <title>Version 3.29.0</title>
+            <pubDate>Tue, 14 Jul 2026 06:53:56 +0000</pubDate>
+            <sparkle:version>107</sparkle:version>
+            <sparkle:shortVersionString>3.29.0</sparkle:shortVersionString>
+            <description><![CDATA[
+                <ul>
+                    <li>Import Music start/stop times as trim markers: when the built-in player is active, dropping tracks from Music now reads each track's start/stop times (Song Info → Options) and applies them as playback trim markers automatically.</li>
+                    <li>Skip missing files on drop: tracks whose underlying file no longer exists (shown with a warning triangle in Music) are now rejected on drop with a "not found" note, instead of silently being skipped at playback.</li>
+                    <li>Genre lists now stored as JSON rather than comma-joined text, so genres containing a comma work correctly. Existing settings migrate automatically.</li>
+                </ul>
+            ]]></description>
+            <enclosure
+                url="https://github.com/richardsladetdj-creator/TangoDisplay/releases/download/v3.29.0/TangoDisplay-v3.29.0-universal.zip"
+                sparkle:edSignature="yaE7h4zRXEMeQQmenwJBmjF2WfNrt8IIr65H0xmKdc4oLyrN8ayos31RSj7YNfmGJVVi5LO4ocCvRI3BXtN5Bg=="
+                length="6643664"
+                type="application/zip"/>
+        </item>
+        <item>
             <title>Version 3.28.1</title>
             <pubDate>Fri, 10 Jul 2026 07:26:46 +0000</pubDate>
             <sparkle:version>106</sparkle:version>
