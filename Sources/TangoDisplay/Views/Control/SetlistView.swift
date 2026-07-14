@@ -826,14 +826,31 @@ struct SetlistView: View {
     // MARK: - Drop handling
 
     private func handleIncomingURLs(_ urls: [URL], anchorID: UUID?) {
+        // Reject files that no longer exist on disk (e.g. a Music track whose
+        // underlying file is missing — shown with a warning triangle in Music).
+        // Otherwise they enter the setlist and get silently skipped at playback.
+        let valid = urls.filter { FileManager.default.fileExists(atPath: $0.path) }
+        let missingCount = urls.count - valid.count
+        let missingSuffix = missingCount > 0 ? " — \(missingFileNote(missingCount))" : ""
+        // Import Music's per-track start/stop into trim markers only when the built-in
+        // player is active — trim only affects playback there, matching the manual editor gate.
+        let importMusicTimes = appState.localPlayer != nil
+
+        guard !valid.isEmpty else {
+            if missingCount > 0 { showDropFeedback(missingFileNote(missingCount)) }
+            return
+        }
+
         guard settings.duplicateTrackProtection else {
-            setlist.insertURLs(urls, before: anchorID)
+            setlist.insertURLs(valid, before: anchorID, importMusicTimes: importMusicTimes)
+            if missingCount > 0 { showDropFeedback(missingFileNote(missingCount)) }
             return
         }
 
         let existingURLs = Set(setlist.entries.map(\.fileURL))
-        guard urls.contains(where: { existingURLs.contains($0) }) else {
-            setlist.insertURLs(urls, before: anchorID)
+        guard valid.contains(where: { existingURLs.contains($0) }) else {
+            setlist.insertURLs(valid, before: anchorID, importMusicTimes: importMusicTimes)
+            if missingCount > 0 { showDropFeedback(missingFileNote(missingCount)) }
             return
         }
 
@@ -844,7 +861,7 @@ struct SetlistView: View {
         case .neverAdd:
             shouldAddDuplicates = false
         case nil:
-            let dupURLs = urls.filter { existingURLs.contains($0) }
+            let dupURLs = valid.filter { existingURLs.contains($0) }
             let matchedPlayed = setlist.entries.contains {
                 $0.state == .played && dupURLs.contains($0.fileURL)
             }
@@ -853,13 +870,19 @@ struct SetlistView: View {
             shouldAddDuplicates = shouldAdd
         }
 
-        let toInsert = shouldAddDuplicates ? urls : urls.filter { !existingURLs.contains($0) }
-        if !toInsert.isEmpty { setlist.insertURLs(toInsert, before: anchorID) }
+        let toInsert = shouldAddDuplicates ? valid : valid.filter { !existingURLs.contains($0) }
+        if !toInsert.isEmpty { setlist.insertURLs(toInsert, before: anchorID, importMusicTimes: importMusicTimes) }
 
-        let skipped = urls.count - toInsert.count
+        let skipped = valid.count - toInsert.count
         if skipped > 0 {
-            showDropFeedback("Added \(toInsert.count) — \(skipped) already in set")
+            showDropFeedback("Added \(toInsert.count) — \(skipped) already in set" + missingSuffix)
+        } else if missingCount > 0 {
+            showDropFeedback(missingFileNote(missingCount))
         }
+    }
+
+    private func missingFileNote(_ n: Int) -> String {
+        "\(n) file\(n == 1 ? "" : "s") not found"
     }
 
     // Brief auto-dismissing note in the bottom drop-hint slot, so silently

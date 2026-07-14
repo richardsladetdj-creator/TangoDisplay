@@ -49,7 +49,7 @@ A native macOS menu-bar app that shows a clean, fullscreen dancer display on an 
 ### Option A — Download pre-built app (easiest)
 
 1. Go to the [Releases](https://github.com/richardsladetdj-creator/TangoDisplay/releases) page
-2. Download `TangoDisplay-v3.28.1-universal.zip` (works on both Apple Silicon and Intel Macs)
+2. Download `TangoDisplay-v3.29.0-universal.zip` (works on both Apple Silicon and Intel Macs)
 3. Unzip and drag `TangoDisplay.app` to your `/Applications` folder
 4. **Right-click › Open** on first launch (required because the app is ad-hoc signed, not notarised)
 5. Grant the permissions macOS requests (see [Permissions](#permissions) below)
@@ -135,6 +135,11 @@ Key design decisions:
 ---
 
 ## Changelog
+
+### v3.29.0
+- **Import Music start/stop times as trim markers:** when the built-in player is active, dropping tracks from Music now reads each track's start/stop times (Song Info → Options) and applies them as playback trim markers automatically.
+- **Skip missing files on drop:** tracks whose underlying file no longer exists (shown with a warning triangle in Music) are now rejected on drop with a "not found" note, instead of silently being skipped at playback.
+- **Genre lists now stored as JSON:** allow/deny genre lists are saved as JSON rather than comma-joined text, so genres containing a comma work correctly. Existing settings migrate automatically.
 
 ### v3.28.1
 - **Fixed a crash (JRiver):** rapidly rebuilding or re-picking the Playing Now list could momentarily leave JRiver without a valid playing position, which crashed TangoDisplay while showing the next track during a cortina. The playlist position is now clamped safely.

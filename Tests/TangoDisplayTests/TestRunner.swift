@@ -1062,6 +1062,28 @@ func runPreparedAutoGapTests() {
     }
 }
 
+// MARK: - Music start/stop → trim seconds
+
+func runMusicTrimTests() {
+    suite("musicTrimSeconds — Music start/stop import") {
+        test("custom start and stop convert ms→s") {
+            let r = musicTrimSeconds(startMs: 5000, stopMs: 150000, totalMs: 180000)
+            try expectEqual(r.start, 5.0)
+            try expectEqual(r.end, 150.0)
+        }
+        test("no start, stop == total → no trim") {
+            let r = musicTrimSeconds(startMs: 0, stopMs: 180000, totalMs: 180000)
+            try expectNil(r.start)
+            try expectNil(r.end)
+        }
+        test("all zero → no trim") {
+            let r = musicTrimSeconds(startMs: 0, stopMs: 0, totalMs: 180000)
+            try expectNil(r.start)
+            try expectNil(r.end)
+        }
+    }
+}
+
 // MARK: - JRiver playlist index clamp
 
 func runPlaylistIndexClampTests() {
@@ -1090,6 +1112,7 @@ func runPlaylistIndexClampTests() {
 
 // MARK: - Main entry point
 
+runMusicTrimTests()
 runPlaylistIndexClampTests()
 runPreparedAutoGapTests()
 runCortinaDetectorTests()

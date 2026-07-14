@@ -35,6 +35,10 @@ Drop onto the track list or into the empty drop zone when the list is empty. Dro
 
 To insert mid-list, drag onto a specific row to place the new track before it rather than appending to the bottom.
 
+If a dropped file no longer exists on disk (for example a Music track shown with a warning triangle because its underlying file is missing), it is rejected on drop with a brief *N files not found* note rather than being silently skipped later at playback.
+
+When the built-in player is active, dropping tracks from Music also imports each track's **start/stop times** (set in Music under Song Info → Options) as playback trim markers automatically — see [Track Start & End Time](#track-start--end-time) below.
+
 You can also **copy** audio files in Finder, Music.app, Swinsian, or Foobar2000 (⌘C), then press **⌘V** while the Setlist panel is focused to append them instantly — no drag required.
 
 **Supported formats:** MP3, M4A (AAC), AIFF, WAV, FLAC, CAF, Opus.
@@ -370,6 +374,7 @@ Notes:
 - Playback begins at the start time and stops at the end time, then advances as normal.
 - Combine with **Repeat Track** to loop just the trimmed range continuously.
 - This is enforced by the built-in player only, so the menu action appears when the built-in player is the active source.
+- Tracks dropped from Music while the built-in player is active have their start/stop times (Song Info → Options) imported as trim markers automatically, so you don't need to re-enter them here. You can still adjust or clear them afterwards.
 
 ---
 

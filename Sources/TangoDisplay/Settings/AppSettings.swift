@@ -50,16 +50,14 @@ final class AppSettings: ObservableObject {
         didSet { UserDefaults.standard.set(useAllowlist, forKey: kPrefix + "useAllowlist") }
     }
     @Published var allowlistGenres: [String] {
-        didSet { UserDefaults.standard.set(allowlistGenres.joined(separator: ","),
-                                           forKey: kPrefix + "allowlistGenres") }
+        didSet { AppSettings.saveGenreList(allowlistGenres, key: kPrefix + "allowlistGenres") }
     }
     @Published var useDenylist: Bool {
         didSet { UserDefaults.standard.set(useDenylist, forKey: kPrefix + "useDenylist") }
     }
     @Published var denylistGenres: [String] {
         didSet {
-            UserDefaults.standard.set(denylistGenres.joined(separator: ","),
-                                       forKey: kPrefix + "denylistGenres")
+            AppSettings.saveGenreList(denylistGenres, key: kPrefix + "denylistGenres")
             // Prune entries no longer in the denylist
             denylistPartialMatchGenres = denylistPartialMatchGenres.filter {
                 denylistGenres.contains($0)
@@ -71,10 +69,8 @@ final class AppSettings: ObservableObject {
     }
     @Published var denylistPartialMatchGenres: Set<String> {
         didSet {
-            UserDefaults.standard.set(
-                Array(denylistPartialMatchGenres).joined(separator: ","),
-                forKey: kPrefix + "denylistPartialMatchGenres"
-            )
+            AppSettings.saveGenreList(Array(denylistPartialMatchGenres),
+                                      key: kPrefix + "denylistPartialMatchGenres")
         }
     }
     @Published var denylistLabelOverrides: [String: String] {
@@ -341,19 +337,19 @@ final class AppSettings: ObservableObject {
         lastTandaLabel  = ud.string(forKey: kPrefix + "lastTandaLabel")  ?? ""
         useAllowlist  = ud.object(forKey: kPrefix + "useAllowlist")
                            .flatMap { $0 as? Bool } ?? true
-        allowlistGenres = AppSettings.parseGenres(
-            ud.string(forKey: kPrefix + "allowlistGenres"), default: ["Cortina"])
+        allowlistGenres = AppSettings.loadGenreList(
+            ud, key: kPrefix + "allowlistGenres", default: ["Cortina"])
         useDenylist   = ud.object(forKey: kPrefix + "useDenylist")
                            .flatMap { $0 as? Bool } ?? true
-        denylistGenres = AppSettings.parseGenres(
-            ud.string(forKey: kPrefix + "denylistGenres"), default: ["Tango", "Vals", "Milonga"])
-        let rawPartial = ud.string(forKey: kPrefix + "denylistPartialMatchGenres")
-        if let rawPartial, !rawPartial.isEmpty {
-            denylistPartialMatchGenres = Set(AppSettings.parseGenres(rawPartial, default: []))
+        let loadedDenylist = AppSettings.loadGenreList(
+            ud, key: kPrefix + "denylistGenres", default: ["Tango", "Vals", "Milonga"])
+        denylistGenres = loadedDenylist
+        if ud.object(forKey: kPrefix + "denylistPartialMatchGenres") != nil {
+            denylistPartialMatchGenres = Set(AppSettings.loadGenreList(
+                ud, key: kPrefix + "denylistPartialMatchGenres", default: []))
         } else {
             // First launch after update: enable partial match for all current denylist genres
-            denylistPartialMatchGenres = Set(AppSettings.parseGenres(
-                ud.string(forKey: kPrefix + "denylistGenres"), default: ["Tango", "Vals", "Milonga"]))
+            denylistPartialMatchGenres = Set(loadedDenylist)
         }
         if let data = ud.data(forKey: kPrefix + "denylistLabelOverrides"),
            let overrides = try? JSONDecoder().decode([String: String].self, from: data) {
@@ -487,6 +483,22 @@ final class AppSettings: ObservableObject {
     private static func parseGenres(_ raw: String?, default defaultValue: [String]) -> [String] {
         guard let raw, !raw.isEmpty else { return defaultValue }
         return raw.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+    }
+
+    private static func saveGenreList(_ list: [String], key: String) {
+        if let data = try? JSONEncoder().encode(list) {
+            UserDefaults.standard.set(data, forKey: key)
+        }
+    }
+
+    // JSON array if present, else legacy comma-string (one-time migration).
+    // Comma is a valid genre character, so comma-joined storage is ambiguous — JSON isn't.
+    private static func loadGenreList(_ ud: UserDefaults, key: String, default def: [String]) -> [String] {
+        if let data = ud.data(forKey: key),
+           let arr = try? JSONDecoder().decode([String].self, from: data) {
+            return arr
+        }
+        return parseGenres(ud.string(forKey: key), default: def)
     }
 
     func displayLabel(for genre: String) -> String {
