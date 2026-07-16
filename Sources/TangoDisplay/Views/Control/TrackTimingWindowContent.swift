@@ -44,6 +44,8 @@ private struct TrackTimingEditor: View {
     @State private var startText: String = ""
     @State private var endText: String = ""
 
+    private let minGap: Double = 0.1   // smallest allowed [start, end] window
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(entry.track.title)
@@ -89,7 +91,7 @@ private struct TrackTimingEditor: View {
                 if fullDuration <= 0 { fullDuration = data.duration }
                 // Clamp defaults to the loaded duration now it's known.
                 if endSec <= 0 || endSec > fullDuration { endSec = fullDuration }
-                startSec = min(startSec, max(0, endSec - 1))
+                startSec = min(startSec, max(0, endSec - minGap))
                 syncTextFromState()
             }
             isLoading = false
@@ -108,23 +110,23 @@ private struct TrackTimingEditor: View {
     private func timeField(_ label: String, text: Binding<String>, onCommit: @escaping () -> Void) -> some View {
         HStack(spacing: 4) {
             Text(label).font(.system(size: 12)).foregroundColor(.secondary)
-            TextField("m:ss", text: text)
+            TextField("m:ss.d", text: text)
                 .font(.system(size: 13).monospacedDigit())
-                .frame(width: 56)
+                .frame(width: 72)
                 .onSubmit(onCommit)
         }
     }
 
     private func commitStart() {
         guard let v = parseTime(startText) else { syncTextFromState(); return }
-        startSec = max(0, min(v, max(0, endSec - 1)))
+        startSec = max(0, min(v, max(0, endSec - minGap)))
         syncTextFromState()
     }
 
     private func commitEnd() {
         guard let v = parseTime(endText) else { syncTextFromState(); return }
         let cap = fullDuration > 0 ? fullDuration : v
-        endSec = min(cap, max(v, startSec + 1))
+        endSec = min(cap, max(v, startSec + minGap))
         syncTextFromState()
     }
 
@@ -149,17 +151,19 @@ private struct TrackTimingEditor: View {
 // MARK: - Helpers
 
 private func formatTime(_ seconds: Double) -> String {
-    let s = Int(max(0, seconds).rounded())
-    return String(format: "%d:%02d", s / 60, s % 60)
+    let total = max(0, seconds)
+    let m = Int(total) / 60
+    let s = total - Double(m * 60)
+    return String(format: "%d:%04.1f", m, s)   // 1:05.4
 }
 
-/// Parses "m:ss" or a bare seconds count; nil if unparseable.
+/// Parses "m:ss.d" or a bare seconds count (both allow tenths); nil if unparseable.
 private func parseTime(_ text: String) -> Double? {
     let t = text.trimmingCharacters(in: .whitespaces)
     if t.isEmpty { return nil }
     let parts = t.split(separator: ":")
-    if parts.count == 2, let m = Int(parts[0]), let s = Int(parts[1]) {
-        return Double(m * 60 + s)
+    if parts.count == 2, let m = Int(parts[0]), let s = Double(parts[1]) {
+        return Double(m * 60) + s
     }
     return Double(t)
 }
@@ -178,6 +182,7 @@ private struct WaveformRangeView: View {
     @State private var draggingEnd = false
 
     private let handleWidth: CGFloat = 8
+    private let minGap: Double = 0.1   // smallest allowed [start, end] window
 
     var body: some View {
         GeometryReader { geo in
@@ -210,7 +215,7 @@ private struct WaveformRangeView: View {
                             .onChanged { drag in
                                 if !draggingStart { draggingStart = true; dragStartAnchor = startSec }
                                 let delta = Double(drag.translation.width / w) * duration
-                                startSec = max(0, min(endSec - 1, dragStartAnchor + delta))
+                                startSec = max(0, min(endSec - minGap, dragStartAnchor + delta))
                             }
                             .onEnded { _ in draggingStart = false }
                     )
@@ -222,7 +227,7 @@ private struct WaveformRangeView: View {
                             .onChanged { drag in
                                 if !draggingEnd { draggingEnd = true; dragEndAnchor = endSec }
                                 let delta = Double(drag.translation.width / w) * duration
-                                endSec = min(duration, max(startSec + 1, dragEndAnchor + delta))
+                                endSec = min(duration, max(startSec + minGap, dragEndAnchor + delta))
                             }
                             .onEnded { _ in draggingEnd = false }
                     )

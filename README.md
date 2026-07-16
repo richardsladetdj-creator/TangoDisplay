@@ -49,7 +49,7 @@ A native macOS menu-bar app that shows a clean, fullscreen dancer display on an 
 ### Option A — Download pre-built app (easiest)
 
 1. Go to the [Releases](https://github.com/richardsladetdj-creator/TangoDisplay/releases) page
-2. Download `TangoDisplay-v3.29.0-universal.zip` (works on both Apple Silicon and Intel Macs)
+2. Download `TangoDisplay-v3.29.1-universal.zip` (works on both Apple Silicon and Intel Macs)
 3. Unzip and drag `TangoDisplay.app` to your `/Applications` folder
 4. **Right-click › Open** on first launch (required because the app is ad-hoc signed, not notarised)
 5. Grant the permissions macOS requests (see [Permissions](#permissions) below)
@@ -135,6 +135,11 @@ Key design decisions:
 ---
 
 ## Changelog
+
+### v3.29.1
+- **Sub-second trim precision:** the Track Start & End editor now accepts tenth-of-a-second times (`m:ss.d`) and allows windows as short as 0.1s.
+- **Auto-gap respects trims:** silence past a trimmed end or before a trimmed start is no longer counted toward the auto-gap target, so trimming a track no longer collapses the gap before the next one.
+- **Missing-file drop alert:** dropping tracks whose files can't be found now shows an alert dialog instead of a brief inline note.
 
 ### v3.29.0
 - **Import Music start/stop times as trim markers:** when the built-in player is active, dropping tracks from Music now reads each track's start/stop times (Song Info → Options) and applies them as playback trim markers automatically.

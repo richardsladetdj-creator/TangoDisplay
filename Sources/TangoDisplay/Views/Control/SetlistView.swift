@@ -831,26 +831,21 @@ struct SetlistView: View {
         // Otherwise they enter the setlist and get silently skipped at playback.
         let valid = urls.filter { FileManager.default.fileExists(atPath: $0.path) }
         let missingCount = urls.count - valid.count
-        let missingSuffix = missingCount > 0 ? " — \(missingFileNote(missingCount))" : ""
+        if missingCount > 0 { showMissingFileAlert(missingCount) }
         // Import Music's per-track start/stop into trim markers only when the built-in
         // player is active — trim only affects playback there, matching the manual editor gate.
         let importMusicTimes = appState.localPlayer != nil
 
-        guard !valid.isEmpty else {
-            if missingCount > 0 { showDropFeedback(missingFileNote(missingCount)) }
-            return
-        }
+        guard !valid.isEmpty else { return }
 
         guard settings.duplicateTrackProtection else {
             setlist.insertURLs(valid, before: anchorID, importMusicTimes: importMusicTimes)
-            if missingCount > 0 { showDropFeedback(missingFileNote(missingCount)) }
             return
         }
 
         let existingURLs = Set(setlist.entries.map(\.fileURL))
         guard valid.contains(where: { existingURLs.contains($0) }) else {
             setlist.insertURLs(valid, before: anchorID, importMusicTimes: importMusicTimes)
-            if missingCount > 0 { showDropFeedback(missingFileNote(missingCount)) }
             return
         }
 
@@ -875,14 +870,19 @@ struct SetlistView: View {
 
         let skipped = valid.count - toInsert.count
         if skipped > 0 {
-            showDropFeedback("Added \(toInsert.count) — \(skipped) already in set" + missingSuffix)
-        } else if missingCount > 0 {
-            showDropFeedback(missingFileNote(missingCount))
+            showDropFeedback("Added \(toInsert.count) — \(skipped) already in set")
         }
     }
 
-    private func missingFileNote(_ n: Int) -> String {
-        "\(n) file\(n == 1 ? "" : "s") not found"
+    private func showMissingFileAlert(_ n: Int) {
+        let alert = NSAlert()
+        alert.messageText = n == 1 ? "Track Not Added" : "Tracks Not Added"
+        alert.informativeText = n == 1
+            ? "1 dragged track was skipped because its file could not be found."
+            : "\(n) dragged tracks were skipped because their files could not be found."
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "OK")
+        alert.runModal()
     }
 
     // Brief auto-dismissing note in the bottom drop-hint slot, so silently

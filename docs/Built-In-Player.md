@@ -365,7 +365,7 @@ Sometimes you want to replay a track from part-way through — for example while
 Right-click a row and select **Track Start & End Time…** to open the editor window. It shows the track's waveform with two controls for setting the range:
 
 - **Drag the handles** — a green handle at the start and a red handle at the end of the waveform. The part of the waveform outside your selection is dulled so the chosen range stands out.
-- **Type the times** — enter a **Start** and **End** time manually in `m:ss` format. The end time cannot be earlier than the start.
+- **Type the times** — enter a **Start** and **End** time manually in `m:ss.d` format (tenths of a second are supported, e.g. `1:05.4`). The end time cannot be earlier than the start.
 
 Click **Apply** to save (or **Cancel** to discard). The row then shows a blue **start–end** badge. To remove the trim, right-click the row and choose **Clear Start & End Time**.
 

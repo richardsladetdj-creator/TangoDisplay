@@ -907,6 +907,11 @@ final class LocalPlayerSource: NSObject, ObservableObject, MusicPlayerSource {
             let currentURL = entry.fileURL
             let nextURL = next?.fileURL
             let nextID = next?.id
+            // Trim clamps: silence past a trimmed end / before a trimmed start never plays,
+            // so it must not be credited against the auto-gap target (else the gap collapses).
+            let outTrimEnd = entry.trimEndSeconds
+            let outDuration = entry.duration
+            let inTrimStart = next?.trimStartSeconds
             autoGapAnalysisTask = Task { [weak self] in
                 let cur = await AudioSilenceAnalyzer.shared.analyze(url: currentURL)
                 guard !Task.isCancelled else { return }
@@ -917,6 +922,14 @@ final class LocalPlayerSource: NSObject, ObservableObject, MusicPlayerSource {
                     lead = 0
                 }
                 guard !Task.isCancelled, let nextID else { return }
+                // Effective trailing silence at the trim point: last `silenceAtEnd` of a
+                // `dur`-long file, trimmed to end at `e`. nil duration → conservatively 0.
+                var effTrailing = cur.silenceAtEnd
+                if let e = outTrimEnd {
+                    effTrailing = outDuration.map { max(0, cur.silenceAtEnd - ($0 - e)) } ?? 0
+                }
+                // Effective leading silence after skipping a trimmed start `s`.
+                let effLeading = inTrimStart.map { max(0, lead - $0) } ?? lead
                 await MainActor.run { [weak self] in
                     guard let self,
                           self.currentEntryID == currentID,
@@ -924,8 +937,8 @@ final class LocalPlayerSource: NSObject, ObservableObject, MusicPlayerSource {
                     self.preparedAutoGap = PreparedAutoGap(
                         currentID: currentID,
                         nextID: nextID,
-                        trailing: cur.silenceAtEnd,
-                        leading: lead
+                        trailing: effTrailing,
+                        leading: effLeading
                     )
                 }
             }
