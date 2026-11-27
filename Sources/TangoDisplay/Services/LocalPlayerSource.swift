@@ -7,7 +7,8 @@ import OSLog
 import TangoDisplayCore
 import TangoDisplayObjC
 
-final class LocalPlayerSource: NSObject, ObservableObject, MusicPlayerSource {
+@MainActor
+final class LocalPlayerSource: NSObject, ObservableObject, @preconcurrency MusicPlayerSource {
 
     // MARK: - MusicPlayerSource callbacks
 
@@ -23,6 +24,9 @@ final class LocalPlayerSource: NSObject, ObservableObject, MusicPlayerSource {
     @Published private(set) var elapsed: Double = 0
     @Published private(set) var duration: Double = 0
     @Published private(set) var currentEntryID: UUID?
+    /// True while the current track is paused in place (resume continues from `elapsed`).
+    /// Distinct from `pause()`, which stops and rewinds the track to its start.
+    @Published private(set) var isHeld = false
     @Published private(set) var isCurrentEntryMarkedAsPlayed: Bool = false
     @Published private(set) var isActivePlaying: Bool = false {
         didSet {
@@ -108,7 +112,21 @@ final class LocalPlayerSource: NSObject, ObservableObject, MusicPlayerSource {
     private var cancellables = Set<AnyCancellable>()
     private var earlyMarkedEntryIDs: Set<UUID> = []
     private var scheduleGeneration: Int = 0
-    private var hoggedDeviceUID: String? = nil
+    private var pendingOutputRetryID: UUID?
+    private var engineRecoveryGeneration: Int?
+    private var scheduledPlaybackDuration: TimeInterval = 0
+    private var playbackProgress: PlaybackProgress?
+
+    /// Hog ownership is changed on `audioDeviceQueue` and released from `deinit`, so it lives
+    /// outside main-actor state behind a lock.
+    private final class HoggedDevice: @unchecked Sendable {
+        private let lock = NSLock()
+        private var uid: String?
+
+        func set(_ newValue: String?) { lock.withLock { uid = newValue } }
+        func take() -> String? { lock.withLock { defer { uid = nil }; return uid } }
+    }
+    private let hoggedDevice = HoggedDevice()
     private let audioDeviceQueue = DispatchQueue(label: "com.tangodisplay.audio-device", qos: .userInitiated)
 
     // MARK: - Private — Audio Unit plugin chain
@@ -140,11 +158,26 @@ final class LocalPlayerSource: NSObject, ObservableObject, MusicPlayerSource {
     // MARK: - Private — auto-gap
 
     private var currentPaddingFrames: AVAudioFrameCount = 0
-    private var preparedAutoGap: PreparedAutoGap?     // silence analysis bound to a specific (current, next) transition
+    private var playableFrames: Range<AVAudioFramePosition>?
+    private var preparedAutoGap: PreparedAutoGap?
+    private var boundedAutoGap: PreparedAutoGap?
+    private var analyzedGapPair: GapPair?
     private var autoGapAnalysisTask: Task<Void, Never>?
-    private var audioStartSampleTime: AVAudioFramePosition = 0
+    private var autoGapCutoffTask: Task<Void, Never>?
     private var silencePending: Bool = false
     private var manualStopPending = false             // set by a user-initiated stop; consumed by the next loadEntry
+
+    private struct GapPair: Equatable, Sendable {
+        let currentID: UUID
+        let currentURL: URL
+        let currentStart: Double
+        let currentEnd: Double
+        let nextID: UUID
+        let nextURL: URL
+        let nextStart: Double?
+        let nextEnd: Double?
+        let measureMaximum: Bool
+    }
 
     // MARK: - Private — loudness analysis
 
@@ -175,7 +208,11 @@ final class LocalPlayerSource: NSObject, ObservableObject, MusicPlayerSource {
         audioEngine.attach(replayGainMixer)
         audioEngine.attach(balanceMixer)
         setupRestorationUnits()
-        connectAudioGraph(format: nil)
+        do {
+            try connectAudioGraph(format: nil)
+        } catch {
+            os_log(.error, "TangoDisplay: initial audio graph failed: %{public}@", error.localizedDescription)
+        }
 
         let frequencies: [Float]          = [60, 250, 1000, 4000, 12000]
         let filterTypes: [AVAudioUnitEQFilterType] = [.lowShelf, .parametric, .parametric, .parametric, .highShelf]
@@ -187,7 +224,7 @@ final class LocalPlayerSource: NSObject, ObservableObject, MusicPlayerSource {
             band.bypass     = false
         }
 
-        try? audioEngine.start()
+        try? Self.startEngine(audioEngine)
 
         NotificationCenter.default.addObserver(
             self,
@@ -297,30 +334,43 @@ final class LocalPlayerSource: NSObject, ObservableObject, MusicPlayerSource {
         }
     }
 
-    @objc private func handleEngineConfigChange() {
+    @objc nonisolated private func handleEngineConfigChange() {
         DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
+            guard let self, !self.isChangingDevice, self.engineRecoveryGeneration == nil else { return }
             // Invalidate any pending dataPlayedBack callbacks so the system-forced engine stop
             // (e.g. headphone removal on System Default) doesn't spuriously fire handleTrackEnd → skipNext().
             self.scheduleGeneration += 1
+            let generation = self.scheduleGeneration
             // Graph rewire must happen with engine stopped; engine is already stopped when this fires.
-            if self.audioFile != nil {
-                self.connectAudioGraph(format: self.audioFile?.processingFormat)
+            if let file = self.audioFile {
+                do {
+                    try self.connectAudioGraph(format: file.processingFormat)
+                } catch {
+                    if self.isActivePlaying { self.recoverPlaybackFailure(error) }
+                    return
+                }
             }
 
             // Capture all state before leaving the main thread.
-            guard let audioUnit = self.audioEngine.outputNode.audioUnit else { return }
+            guard let audioUnit = self.audioEngine.outputNode.audioUnit else {
+                if self.isActivePlaying { self.interruptForUnavailableOutput() }
+                self.engineStalled = true
+                return
+            }
+            self.engineRecoveryGeneration = generation
             let uid = self.settings.builtInOutputDeviceUID
             let hogEnabled = self.settings.builtInHogMode
             let wasPlaying = self.isActivePlaying
             let savedElapsed = self.elapsed
+            let engine = self.audioEngine
+            let player = self.playerNode
 
             // Dispatch blocking CoreAudio work off the main thread to avoid a UI spinner.
             self.audioDeviceQueue.async { [weak self] in
                 guard let self else { return }
 
                 // Re-assert the user's chosen output device before restarting.
-                self.setOutputDeviceProperty(audioUnit: audioUnit, uid: uid)
+                Self.setOutputDeviceProperty(audioUnit: audioUnit, uid: uid)
 
                 // Detect hog-mode theft by another process. Checked with hog mode on too —
                 // sleep drops our claim, so another app can take the device while we're away.
@@ -333,7 +383,7 @@ final class LocalPlayerSource: NSObject, ObservableObject, MusicPlayerSource {
                 }
 
                 if deviceStolenByOther && wasPlaying {
-                    self.playerNode.stop()
+                    player.stop()
                 }
 
                 // After wake the device can take seconds to come back, so one attempt isn't
@@ -343,7 +393,7 @@ final class LocalPlayerSource: NSObject, ObservableObject, MusicPlayerSource {
                 for attempt in 0..<10 {
                     if attempt > 0 { Thread.sleep(forTimeInterval: 0.5) }
                     do {
-                        try self.audioEngine.start()
+                        try Self.startEngine(engine)
                         started = true
                         break
                     } catch {
@@ -359,26 +409,31 @@ final class LocalPlayerSource: NSObject, ObservableObject, MusicPlayerSource {
                 }
 
                 DispatchQueue.main.async {
+                    self.engineRecoveryGeneration = nil
+                    guard self.scheduleGeneration == generation else { return }
                     if deviceStolenByOther {
                         self.hogModeConflict = true
                         if wasPlaying {
                             self.isActivePlaying = false
+                            if let id = self.currentEntryID, !self.currentEntryIsPlayed() {
+                                self.setlist.markPaused(id: id)
+                            }
                             self.reportCurrentState()
                             self.hogDeviceStolenAlert = true
                             // Pulse back to false so future interruptions can re-trigger the alert.
                             DispatchQueue.main.async { self.hogDeviceStolenAlert = false }
                         }
                     } else if !started {
-                        self.isActivePlaying = false
+                        if wasPlaying { self.interruptForUnavailableOutput() }
                         self.engineStalled = true
-                        self.reportCurrentState()
                     } else {
                         self.engineStalled = false
                         self.levelMeter.reinstallTap()
                         self.applyBalance(self._balance)
-                        if self.audioFile != nil {
-                            self.seekTo(savedElapsed)
-                            if wasPlaying { self.startPlayerNode() }
+                        if let retryID = self.pendingOutputRetryID {
+                            self.playForward(from: self.setlist.entries.first { $0.id == retryID }, bypassAutoGap: true)
+                        } else if self.audioFile != nil {
+                            self.seekTo(savedElapsed, resume: wasPlaying)
                         }
                     }
                 }
@@ -388,10 +443,10 @@ final class LocalPlayerSource: NSObject, ObservableObject, MusicPlayerSource {
 
     /// Acquires hog mode on `uid` if the user wants it. Must be called from `audioDeviceQueue`
     /// (CoreAudio property set can block); all @Published writes dispatch back to main.
-    private func reacquireHogIfNeeded(uid: String, hogEnabled: Bool) {
+    nonisolated private func reacquireHogIfNeeded(uid: String, hogEnabled: Bool) {
         guard hogEnabled && !uid.isEmpty else { return }
         if AudioDeviceManager.acquireHogMode(forUID: uid) {
-            self.hoggedDeviceUID = uid
+            hoggedDevice.set(uid)
             DispatchQueue.main.async { self.hogModeConflict = false }
         } else {
             DispatchQueue.main.async { self.hogModeConflict = true }
@@ -420,54 +475,64 @@ final class LocalPlayerSource: NSObject, ObservableObject, MusicPlayerSource {
         // Invalidate any pending dataPlayedBack callbacks before stopping the player node,
         // so the stop doesn't spuriously fire handleTrackEnd → skipNext().
         scheduleGeneration += 1
+        let generation = scheduleGeneration
 
         isChangingDevice = true
+        let engine = audioEngine
+        let player = playerNode
+        // AudioUnit is a raw pointer; the engine keeps it alive while this queue uses it.
+        nonisolated(unsafe) let outputUnit = audioUnit
 
         audioDeviceQueue.async { [weak self] in
             guard let self else { return }
 
             // Release hog on the previous device.
-            if let prev = self.hoggedDeviceUID {
+            if let prev = self.hoggedDevice.take() {
                 AudioDeviceManager.releaseHogMode(forUID: prev)
-                self.hoggedDeviceUID = nil
             }
 
             // CoreAudio stop/start can block — must be off the main thread.
-            if self.audioEngine.isRunning {
-                self.playerNode.stop()
-                self.audioEngine.stop()
+            if engine.isRunning {
+                player.stop()
+                engine.stop()
             }
 
-            self.setOutputDeviceProperty(audioUnit: audioUnit, uid: uid)
+            Self.setOutputDeviceProperty(audioUnit: outputUnit, uid: uid)
 
             do {
-                try self.audioEngine.start()
+                try Self.startEngine(engine)
 
                 self.reacquireHogIfNeeded(uid: uid, hogEnabled: hogEnabled)
 
                 // AVAudioEngine player ops and tap reinstall must be on main.
                 DispatchQueue.main.async {
+                    self.isChangingDevice = false
+                    guard self.scheduleGeneration == generation else { return }
                     self.engineStalled = false
                     self.levelMeter.reinstallTap()
-                    if self.audioFile != nil {
-                        self.seekTo(savedElapsed)
-                        if wasPlaying { self.startPlayerNode() }
+                    if let retryID = self.pendingOutputRetryID {
+                        self.playForward(from: self.setlist.entries.first { $0.id == retryID }, bypassAutoGap: true)
+                    } else if self.audioFile != nil {
+                        self.seekTo(savedElapsed, resume: wasPlaying)
                     }
-                    self.isChangingDevice = false
                 }
             } catch {
                 os_log(.error, "TangoDisplay: applyOutputDevice engine restart failed: %{public}@",
                        error.localizedDescription)
-                DispatchQueue.main.async { self.isChangingDevice = false }
+                DispatchQueue.main.async {
+                    self.isChangingDevice = false
+                    guard self.scheduleGeneration == generation else { return }
+                    if wasPlaying { self.interruptForUnavailableOutput() }
+                    self.engineStalled = true
+                }
             }
         }
     }
 
-    private func applyHogMode(enabled: Bool, deviceUID: String) {
+    nonisolated private func applyHogMode(enabled: Bool, deviceUID: String) {
         // Must be called from audioDeviceQueue. All @Published writes dispatch back to main.
-        if let prev = hoggedDeviceUID {
+        if let prev = hoggedDevice.take() {
             AudioDeviceManager.releaseHogMode(forUID: prev)
-            hoggedDeviceUID = nil
         }
         guard enabled, !deviceUID.isEmpty else {
             let conflict: Bool
@@ -481,7 +546,7 @@ final class LocalPlayerSource: NSObject, ObservableObject, MusicPlayerSource {
             return
         }
         if AudioDeviceManager.acquireHogMode(forUID: deviceUID) {
-            hoggedDeviceUID = deviceUID
+            hoggedDevice.set(deviceUID)
             DispatchQueue.main.async { self.hogModeConflict = false }
         } else {
             DispatchQueue.main.async { self.hogModeConflict = true }
@@ -491,13 +556,13 @@ final class LocalPlayerSource: NSObject, ObservableObject, MusicPlayerSource {
 
     deinit {
         NSWorkspace.shared.notificationCenter.removeObserver(self)
-        let uid = hoggedDeviceUID
+        let uid = hoggedDevice.take()
         audioDeviceQueue.async {
             if let uid { AudioDeviceManager.releaseHogMode(forUID: uid) }
         }
     }
 
-    private func setOutputDeviceProperty(audioUnit: AudioUnit, uid: String) {
+    nonisolated private static func setOutputDeviceProperty(audioUnit: AudioUnit, uid: String) {
         if uid.isEmpty {
             // Restore default device by reading system default
             var defaultID = AudioDeviceID(0)
@@ -596,7 +661,7 @@ final class LocalPlayerSource: NSObject, ObservableObject, MusicPlayerSource {
         }
     }
 
-    private static func analysisStatusForError(_ error: Error) -> String {
+    nonisolated private static func analysisStatusForError(_ error: Error) -> String {
         if error is CancellationError { return "ReplayGain: Cancelled" }
         switch error as? LoudnessAnalysisError {
         case .cannotOpenFile:    return "ReplayGain: Cannot read file"
@@ -681,6 +746,9 @@ final class LocalPlayerSource: NSObject, ObservableObject, MusicPlayerSource {
     }
 
     func stop() {
+        // Deactivating the source isn't a DJ stop, so leave manualStopPending alone.
+        finishPlaybackAttempt()
+        teardownObservers()
         for runtime in slotRuntimes.values {
             runtime.loadTask?.cancel()
             runtime.loadTask = nil
@@ -688,24 +756,10 @@ final class LocalPlayerSource: NSObject, ObservableObject, MusicPlayerSource {
             runtime.pluginWindow = nil
             runtime.pluginWindowVC = nil
         }
-        currentEntryID = nil
-        isCurrentEntryMarkedAsPlayed = false
-        isActivePlaying = false
-        replayGainStatus = ""
         replayGainMixer.outputVolume = 1.0
         inFlightAnalysisURLs.removeAll()
-        playerNode.stop()
         audioEngine.stop()
         levelMeter.reset()
-        audioFile = nil
-        elapsed = 0
-        duration = 0
-        currentPaddingFrames = 0
-        silencePending = false
-        audioStartSampleTime = 0
-        autoGapAnalysisTask?.cancel()
-        preparedAutoGap = nil
-        teardownObservers()
     }
 
     func pollNow() {
@@ -730,50 +784,58 @@ final class LocalPlayerSource: NSObject, ObservableObject, MusicPlayerSource {
     // MARK: - Transport controls
 
     func play() {
+        if isHeld {
+            resumeHeld()
+            return
+        }
+        // Non-blocking: a stale result only means a missing file fails and gets skipped.
+        setlist.refreshMediaAvailability()
         if let id = currentEntryID, earlyMarkedEntryIDs.contains(id) || currentEntryIsPlayed() {
             skipNext()
             return
         }
-        // The topmost not-yet-played entry always wins. If a reorder dragged a queued track
-        // above the currently loaded/paused entry, discard the stale load and start the top one
-        // — the paused entry reverts to a normal queued track (its pause position is dropped).
-        if let id = currentEntryID, audioFile != nil,
-           let firstUnplayed = setlist.entries.first(where: { $0.state != .played }),
-           firstUnplayed.id != id {
-            setlist.markQueued(id: id)
-            playerNode.stop()
-            audioFile = nil
-            seekOffset = 0
-            elapsed = 0
-            currentEntryID = firstUnplayed.id
-        }
-        if audioFile == nil {
-            // Prefer currentEntryID if set (e.g. pause() advanced it to the next track);
-            // fall back to first non-played entry for a fresh start.
-            let entry: SetlistEntry?
-            if let id = currentEntryID {
-                entry = setlist.entries.first(where: { $0.id == id })
-            } else {
-                entry = setlist.entries.first(where: { $0.state != .played })
-            }
-            guard let entry else { return }
-            loadEntry(entry)
-            startPlayerNode()
-            isActivePlaying = true
-        } else if let id = currentEntryID {
-            // Resuming the track that was stopped: the pending stop is spent, so its
-            // natural end must not suppress the following track's gap.
+        let first = setlist.firstPlayable
+        // Keep the usual topmost playable row after a reorder.
+        if let id = currentEntryID, audioFile != nil, first?.id == id {
             manualStopPending = false
-            setlist.markPlaying(id: id)
-            seekTo(0) { [weak self] in
-                self?.startPlayerNode()
-                self?.isActivePlaying = true
-            }
+            seekTo(0, resume: true)
+            return
         }
+        let preferredID = pendingOutputRetryID ?? (audioFile == nil ? currentEntryID : nil)
+        let entry = preferredID.flatMap { id in setlist.entries.first { $0.id == id && setlist.isPlayable($0) } } ?? first
+        if let id = currentEntryID, id != entry?.id, audioFile != nil {
+            setlist.markQueued(id: id)
+        }
+        playForward(from: entry)
+    }
+
+    /// Pauses at the current position without rewinding or advancing. The track keeps
+    /// its row and played status; `resumeHeld()` (or `play()`) continues from here.
+    func holdPause() {
+        guard isActivePlaying, audioFile != nil, let id = currentEntryID else { return }
+        scheduleGeneration += 1
+        cancelAutoGapCutoff()
+        playerNode.stop()
+        isActivePlaying = false
+        isHeld = true
+        if !earlyMarkedEntryIDs.contains(id), !currentEntryIsPlayed() {
+            setlist.markPaused(id: id)
+        }
+        // Reschedule from the held position (node stopped, so this doesn't start playback).
+        seekTo(elapsed)
         reportCurrentState()
     }
 
+    func resumeHeld() {
+        guard isHeld else { return }
+        isHeld = false
+        manualStopPending = false
+        seekTo(elapsed, resume: true)
+    }
+
     func pause() {
+        isHeld = false
+        pendingOutputRetryID = nil
         manualStopPending = true
         scheduleGeneration += 1
         playerNode.stop()
@@ -806,9 +868,17 @@ final class LocalPlayerSource: NSObject, ObservableObject, MusicPlayerSource {
 
     func stopTrack() {
         manualStopPending = true
-        if let id = currentEntryID, !earlyMarkedEntryIDs.contains(id), !currentEntryIsPlayed() {
+        finishPlaybackAttempt()
+    }
+
+    private func finishPlaybackAttempt() {
+        isHeld = false
+        pendingOutputRetryID = nil
+        if let id = currentEntryID, let state = setlist.entries.first(where: { $0.id == id })?.state,
+           state == .playing || state == .paused {
             setlist.markQueued(id: id)
         }
+        if let id = currentEntryID { setlist.setAutoGapApplied(id: id, applied: false) }
         scheduleGeneration += 1
         currentEntryID = nil
         isCurrentEntryMarkedAsPlayed = false
@@ -821,82 +891,34 @@ final class LocalPlayerSource: NSObject, ObservableObject, MusicPlayerSource {
         seekOffset = 0
         currentPaddingFrames = 0
         silencePending = false
-        audioStartSampleTime = 0
-        autoGapAnalysisTask?.cancel()
-        preparedAutoGap = nil
+        playbackProgress = nil
+        playableFrames = nil
+        resetAutoGapAnalysis()
         reportCurrentState()
         reportPlaylist()
         onNextTrackUpdate?(nil)
     }
 
-    func skipNext() {
-        guard let id = currentEntryID else { play(); return }
-        let finishedEntry = setlist.entries.first(where: { $0.id == id })
-        let stopForPerformance = (finishedEntry?.isPerformance == true) && settings.stopAfterEachPerformanceTrack
-        let shouldStop = (id == setlist.stopAfterEntryID) || stopForPerformance
-        // Repeat: loop the same non-dance track (stop-after wins via shouldStop above)
-        if !shouldStop, finishedEntry?.repeatTrack == true, let entry = finishedEntry {
-            loadEntry(entry, bypassAutoGap: true)
-            startPlayerNode()
-            isActivePlaying = true
-            reportCurrentState()
-            return
-        }
-        setlist.markPlayed(id: id)
-        if id == setlist.stopAfterEntryID { setlist.stopAfterEntryID = nil }
-        if !shouldStop, let next = setlist.firstUnplayed(after: id) {
-            loadEntry(next)
-            startPlayerNode()
-            isActivePlaying = true
-            reportCurrentState()
-        } else {
-            currentEntryID = nil
-            isActivePlaying = false
-            replayGainStatus = ""
-            playerNode.stop()
-            audioFile = nil
-            elapsed = 0
-            duration = 0
-            seekOffset = 0
-            reportCurrentState()
-            reportPlaylist()
-            onNextTrackUpdate?(nil)
-        }
-    }
+    func skipNext() { advance(bypassAutoGap: false) }
 
-    func skipNextImmediate() {
+    func skipNextImmediate() { advance(bypassAutoGap: true) }
+
+    private func advance(bypassAutoGap: Bool, naturalEnd: Bool = false, outgoingTrim: Double = 0) {
         guard let id = currentEntryID else { play(); return }
-        let finishedEntry = setlist.entries.first(where: { $0.id == id })
-        let stopForPerformance = (finishedEntry?.isPerformance == true) && settings.stopAfterEachPerformanceTrack
-        let shouldStop = (id == setlist.stopAfterEntryID) || stopForPerformance
-        // Repeat: loop the same non-dance track (stop-after wins via shouldStop above)
-        if !shouldStop, finishedEntry?.repeatTrack == true, let entry = finishedEntry {
-            loadEntry(entry, bypassAutoGap: true)
-            startPlayerNode()
-            isActivePlaying = true
-            reportCurrentState()
+        let finished = setlist.entries.first { $0.id == id }
+        let shouldStop = id == setlist.stopAfterEntryID
+            || (finished?.isPerformance == true && settings.stopAfterEachPerformanceTrack)
+        if !shouldStop, let finished, finished.repeatTrack {
+            playForward(from: finished, bypassAutoGap: true)
             return
         }
+        let next = shouldStop ? nil : setlist.firstUnplayed(after: id)
+        let adjustment = naturalEnd && !bypassAutoGap
+            ? next.flatMap { boundedGap(to: $0, outgoingTrim: outgoingTrim) } : nil
         setlist.markPlayed(id: id)
         if id == setlist.stopAfterEntryID { setlist.stopAfterEntryID = nil }
-        if !shouldStop, let next = setlist.firstUnplayed(after: id) {
-            loadEntry(next, bypassAutoGap: true)
-            startPlayerNode()
-            isActivePlaying = true
-            reportCurrentState()
-        } else {
-            currentEntryID = nil
-            isActivePlaying = false
-            replayGainStatus = ""
-            playerNode.stop()
-            audioFile = nil
-            elapsed = 0
-            duration = 0
-            seekOffset = 0
-            reportCurrentState()
-            reportPlaylist()
-            onNextTrackUpdate?(nil)
-        }
+        playForward(from: next, bypassAutoGap: bypassAutoGap,
+                    gapAdjustment: adjustment.flatMap { $0.trailingTrim <= 0.015 ? $0 : nil })
     }
 
     func skipPrevious() {
@@ -905,232 +927,251 @@ final class LocalPlayerSource: NSObject, ObservableObject, MusicPlayerSource {
             return
         }
         guard let id = currentEntryID else { return }
-        if let prev = setlist.entry(before: id) {
-            let wasPlaying = isActivePlaying
-            loadEntry(prev)
-            if wasPlaying { startPlayerNode(); isActivePlaying = true; reportCurrentState() }
+        if let previous = setlist.entry(before: id) {
+            playForward(from: previous, shouldPlay: isActivePlaying)
         } else {
             seek(to: 0)
         }
     }
 
-    func seek(to seconds: Double) {
-        seekTo(seconds)
-    }
-
-    // MARK: - Jump to a specific entry (double-click in SetlistView)
+    func seek(to seconds: Double) { seekTo(seconds) }
 
     func jumpTo(_ entry: SetlistEntry) {
-        loadEntry(entry)
-        startPlayerNode()
-        isActivePlaying = true
-        reportCurrentState()
+        playForward(from: setlist.entries.first { $0.id == entry.id })
     }
 
     func retryOutputDevice() {
         applyOutputDevice(settings.builtInOutputDeviceUID)
     }
 
-    // MARK: - Private: guarded playback start
+    private func playForward(from first: SetlistEntry?, bypassAutoGap: Bool = false,
+                             shouldPlay: Bool = true, gapAdjustment: PreparedAutoGap.Adjustment? = nil) {
+        runPlayback(.start(first, bypassAutoGap: bypassAutoGap), shouldPlay: shouldPlay,
+                    gapAdjustment: gapAdjustment)
+    }
 
-    /// `AVAudioPlayerNode.play()` raises an ObjC exception — uncatchable from Swift, so an
-    /// instant abort — when its engine isn't running. That is the wake-from-sleep crash:
-    /// CoreAudio hadn't rebuilt the output device yet, `audioEngine.start()` failed, and the
-    /// resume path played anyway. Every play goes through here instead.
-    @discardableResult
-    private func startPlayerNode() -> Bool {
+    private func runPlayback(_ request: PlaybackRecovery.Request, shouldPlay: Bool = true,
+                             gapAdjustment: PreparedAutoGap.Adjustment? = nil) {
+        pendingOutputRetryID = nil
+        let outcome = PlaybackRecovery.run(request, nextAfter: setlist.firstUnplayed(after:),
+                                           attempt: { entry, bypassAutoGap in
+            isActivePlaying = false
+            try loadEntry(entry, bypassAutoGap: bypassAutoGap, gapAdjustment: bypassAutoGap ? nil : gapAdjustment)
+            guard currentEntryID == entry.id, audioFile != nil else {
+                throw PlaybackFailure.track("The audio track could not be prepared.")
+            }
+            if shouldPlay { try startPlayerNode() }
+        }, didFail: markTrackFailed(_:error:))
+
+        switch outcome {
+        case .started(let entry):
+            setlist.setCurrentEntry(id: entry.id, paused: !shouldPlay)
+            refreshAutoGapAnalysis()
+            reportCurrentState()
+            reportPlaylist()
+            onNextTrackUpdate?(setlist.firstUnplayed(after: entry.id)?.track)
+        case .waitingForOutput(let entry):
+            finishPlaybackAttempt()
+            pendingOutputRetryID = shouldPlay ? entry.id : nil
+            engineStalled = true
+        case .exhausted:
+            finishPlaybackAttempt()
+        }
+    }
+
+    private func markTrackFailed(_ id: UUID, error: Error) {
+        os_log(.error, "TangoDisplay: skipping track: %{public}@", error.localizedDescription)
+        setlist.markPlaybackFailure(id: id, reason: error.localizedDescription)
+        if id == setlist.stopAfterEntryID { setlist.stopAfterEntryID = nil }
+    }
+
+    private func recoverPlaybackFailure(_ error: Error) {
+        guard let id = currentEntryID else { finishPlaybackAttempt(); return }
+        runPlayback(.recover(after: id, error: error))
+    }
+
+    private func interruptForUnavailableOutput() {
+        guard let id = currentEntryID else { finishPlaybackAttempt(); return }
+        markTrackFailed(id, error: PlaybackFailure.track("The audio output was interrupted. This track was skipped."))
+        let nextID = setlist.firstUnplayed(after: id)?.id
+        finishPlaybackAttempt()
+        pendingOutputRetryID = nextID
+    }
+
+    nonisolated private static func startEngine(_ engine: AVAudioEngine) throws {
+        var reason: NSString?
+        guard TDTryAudioEngineStart(engine, &reason) else {
+            throw PlaybackFailure.track((reason as String?) ?? "Couldn’t start the audio engine.")
+        }
+    }
+
+    private func startPlayerNode() throws {
         if !audioEngine.isRunning {
             do {
-                try audioEngine.start()
+                try Self.startEngine(audioEngine)
             } catch {
-                os_log(.error, "TangoDisplay: play blocked, engine not running: %{public}@",
-                       error.localizedDescription)
-                isActivePlaying = false
-                engineStalled = true
-                reportCurrentState()
-                return false
+                os_log(.error, "TangoDisplay: audio engine start failed: %{public}@", error.localizedDescription)
+                throw PlaybackFailure.outputUnavailable
             }
         }
+        var reason: NSString?
+        guard TDTryAudioPlayerPlay(playerNode, &reason) else {
+            throw PlaybackFailure.track((reason as String?) ?? "Couldn’t start the audio track.")
+        }
+        playbackProgress = PlaybackProgress(startedAt: ProcessInfo.processInfo.systemUptime,
+                                            scheduledDuration: scheduledPlaybackDuration)
         engineStalled = false
-        playerNode.play()
-        return true
+        isActivePlaying = true
+    }
+
+    private func schedule(_ file: AVAudioFile, start: AVAudioFramePosition = 0,
+                          count: AVAudioFrameCount = 0, generation: Int) throws {
+        var reason: NSString?
+        guard TDTryAudioPlayerSchedule(playerNode, file, start, count, { [weak self] in
+            DispatchQueue.main.async { self?.handleTrackEnd(generation: generation) }
+        }, &reason) else {
+            throw PlaybackFailure.track((reason as String?) ?? "Couldn’t schedule the audio track.")
+        }
+        let frames = count == 0 ? file.length : AVAudioFramePosition(count)
+        scheduledPlaybackDuration = (Double(frames) + Double(currentPaddingFrames)) / file.fileFormat.sampleRate
     }
 
     // MARK: - Private: seek implementation
 
-    private func seekTo(_ seconds: Double, completion: (() -> Void)? = nil) {
-        guard let file = audioFile else { completion?(); return }
+    private func seekTo(_ seconds: Double, resume: Bool = false) {
+        guard let file = audioFile, let range = playableFrames, seconds.isFinite else { return }
         let sampleRate = file.fileFormat.sampleRate
-        let startFrame = AVAudioFramePosition(max(0, seconds) * sampleRate)
-        let totalFrames = file.length
-        guard startFrame < totalFrames else { completion?(); return }
-        let frameCount = AVAudioFrameCount(totalFrames - startFrame)
-        let wasPlaying = playerNode.isPlaying
+        let start = max(Double(range.lowerBound), seconds * sampleRate)
+        guard start < Double(range.upperBound) else {
+            if resume { skipNext() }
+            return
+        }
+        let startFrame = AVAudioFramePosition(start)
+        let frameCount = AVAudioFrameCount(clamping: range.upperBound - startFrame)
+        let wasPlaying = resume || playerNode.isPlaying
+        scheduleGeneration += 1
+        cancelAutoGapCutoff()
         playerNode.stop()
-        seekOffset = seconds
-        elapsed = seconds
+        seekOffset = Double(startFrame) / sampleRate
+        elapsed = seekOffset
         currentPaddingFrames = 0
         silencePending = false
-        audioStartSampleTime = 0
-        scheduleGeneration += 1
-        let gen = scheduleGeneration
-        playerNode.scheduleSegment(file, startingFrame: startFrame, frameCount: frameCount,
-                                   at: nil, completionCallbackType: .dataPlayedBack) { [weak self] _ in
-            DispatchQueue.main.async { self?.handleTrackEnd(generation: gen) }
+        do {
+            try schedule(file, start: startFrame, count: frameCount, generation: scheduleGeneration)
+            if wasPlaying {
+                try startPlayerNode()
+                if let id = currentEntryID,
+                   setlist.entries.first(where: { $0.id == id })?.state == .paused {
+                    setlist.setCurrentEntry(id: id)
+                }
+                reportCurrentState()
+            }
+        } catch PlaybackFailure.outputUnavailable {
+            interruptForUnavailableOutput()
+            engineStalled = true
+        } catch {
+            if wasPlaying {
+                recoverPlaybackFailure(error)
+            } else {
+                finishPlaybackAttempt()
+            }
         }
-        if wasPlaying { startPlayerNode() }
-        completion?()
     }
 
     // MARK: - Private: entry loading
 
-    private func loadEntry(_ entry: SetlistEntry, bypassAutoGap: Bool = false) {
+    private func loadEntry(_ entry: SetlistEntry, bypassAutoGap: Bool = false,
+                           gapAdjustment: PreparedAutoGap.Adjustment? = nil) throws {
         earlyMarkedEntryIDs.remove(entry.id)
         isCurrentEntryMarkedAsPlayed = false
-        playerNode.stop()
+        isHeld = false
         scheduleGeneration += 1
+        cancelAutoGapCutoff()
         let gen = scheduleGeneration
+        playerNode.stop()
+        var reason: NSString?
+        guard let file = TDTryOpenAudioFile(entry.fileURL, &reason) else {
+            throw PlaybackFailure.track((reason as String?) ?? "Couldn’t read the audio file.")
+        }
+        guard file.length > 0, file.fileFormat.sampleRate.isFinite, file.fileFormat.sampleRate > 0,
+              file.processingFormat.channelCount > 0 else {
+            throw PlaybackFailure.track("This track contains no playable audio.")
+        }
+        audioFile = file
+        seekOffset = 0
+        elapsed = 0
+        duration = Double(file.length) / file.fileFormat.sampleRate
+        // scheduleFile requires the file format to exactly match the output bus format.
+        // Stop the engine before reconnecting so the graph is in a clean state; a mono
+        // AIFF scheduled against the stereo-defaulted startup connection produces silence.
+        audioEngine.stop()
+        // startRestorationForTrack owns the scout for a track load, so don't fire a
+        // second one from here.
+        applyRestorationEngagement(restorationNodes(for: entry), scoutIfNewlyOn: false)
+        try connectAudioGraph(format: file.processingFormat)
         do {
-            let file = try AVAudioFile(forReading: entry.fileURL)
-            audioFile = file
-            seekOffset = 0
-            elapsed = 0
-            duration = Double(file.length) / file.fileFormat.sampleRate
-            // scheduleFile requires the file format to exactly match the output bus format.
-            // Stop the engine before reconnecting so the graph is in a clean state; a mono
-            // AIFF scheduled against the stereo-defaulted startup connection produces silence.
-            audioEngine.stop()
-            // startRestorationForTrack owns the scout for a track load, so don't fire a
-            // second one from here.
-            applyRestorationEngagement(restorationNodes(for: entry), scoutIfNewlyOn: false)
-            connectAudioGraph(format: file.processingFormat)
-            try audioEngine.start()
-            levelMeter.reinstallTap()
-            startRestorationForTrack(entry)
-            applyReplayGain(for: entry)
+            try Self.startEngine(audioEngine)
+        } catch {
+            os_log(.error, "TangoDisplay: engine start for track failed: %{public}@", error.localizedDescription)
+            throw PlaybackFailure.outputUnavailable
+        }
+        levelMeter.reinstallTap()
+        startRestorationForTrack(entry)
+        applyReplayGain(for: entry)
 
-            // Pre-warm loudness analysis for the next track so it's cached before it starts.
-            if let nextEntry = setlist.entry(after: entry.id) {
-                preAnalyseIfNeeded(nextEntry)
-            }
+        // Pre-warm loudness analysis for the next track so it's cached before it starts.
+        if let nextEntry = setlist.entry(after: entry.id) {
+            preAnalyseIfNeeded(nextEntry)
+        }
 
-            // Auto-gap: schedule silence before the file if needed.
-            // preparedAutoGap is pre-populated by the background analysis from the previous track's loadEntry.
-            currentPaddingFrames = 0
-            silencePending = false
-            audioStartSampleTime = 0
-            let isFirstTrack = setlist.entries.first?.id == entry.id
-                && !setlist.entries.contains(where: { $0.state == .played })
-            var autoGapApplied = false
-            let autoGapIgnored = entry.autoGapIgnored(isFirstTrack: isFirstTrack,
-                                                      ignoreFirstTrack: settings.autoGapIgnoreFirstTrack)
-            // A manual stop already created the gap; don't add a second one on the next start.
-            let skipForManualStop = settings.autoGapSkipAfterManualStop && manualStopPending
-            if !bypassAutoGap && !skipForManualStop && !autoGapIgnored && settings.autoGapEnabled {
-                // Use the analysis prepared for this exact (outgoing, incoming) pair.
-                // currentEntryID still holds the outgoing track here (set to the new
-                // entry below). A stale/mismatched pair → nil → conservative full target.
-                let padding = preparedAutoGap?.injectedDuration(
-                    currentID: currentEntryID ?? entry.id,
-                    nextID: entry.id,
-                    target: settings.autoGapDuration
-                ) ?? settings.autoGapDuration
-                if padding > 0 {
-                    let frames = AVAudioFrameCount(padding * file.fileFormat.sampleRate)
+        // Auto-gap: schedule silence before the file if needed.
+        // preparedAutoGap is pre-populated by the background analysis from the previous track's loadEntry.
+        currentPaddingFrames = 0
+        silencePending = false
+        let isFirstTrack = setlist.entries.first?.id == entry.id
+            && !setlist.entries.contains(where: { $0.state == .played })
+        var autoGapApplied = false
+        let autoGapIgnored = entry.autoGapIgnored(isFirstTrack: isFirstTrack,
+                                                  ignoreFirstTrack: settings.autoGapIgnoreFirstTrack)
+        // A manual stop already created the gap; don't add a second one on the next start.
+        let skipForManualStop = settings.autoGapSkipAfterManualStop && manualStopPending
+        if !bypassAutoGap && !skipForManualStop && !autoGapIgnored && settings.autoGapEnabled {
+            // Use the analysis prepared for this exact (outgoing, incoming) pair.
+            // currentEntryID still holds the outgoing track here (set to the new
+            // entry below). A stale/mismatched pair → nil → conservative full target.
+            let padding = gapAdjustment?.padding ?? preparedAutoGap?.injectedDuration(
+                currentID: currentEntryID ?? entry.id,
+                nextID: entry.id,
+                target: settings.autoGapDuration
+            ) ?? settings.autoGapDuration
+            if padding > 0 {
+                let frameCount = (padding * file.fileFormat.sampleRate).rounded(.down)
+                if frameCount >= 1, let frames = AVAudioFrameCount(exactly: frameCount),
+                   let buffer = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: frames) {
+                    buffer.frameLength = frames
+                    try scheduleGap(buffer, entryID: entry.id, generation: gen)
                     silencePending = true
-                    let entryID = entry.id
-                    playerNode.scheduleBuffer(
-                        makeSilenceBuffer(format: file.processingFormat, frameCount: frames),
-                        completionCallbackType: .dataConsumed
-                    ) { [weak self] _ in
-                        DispatchQueue.main.async {
-                            guard let self,
-                                  let nodeTime = self.playerNode.lastRenderTime,
-                                  nodeTime.isSampleTimeValid,
-                                  let pt = self.playerNode.playerTime(forNodeTime: nodeTime) else { return }
-                            self.audioStartSampleTime = pt.sampleTime
-                            self.silencePending = false
-                            self.setlist.setAutoGapApplied(id: entryID, applied: false)
-                        }
-                    }
                     currentPaddingFrames = frames
                     autoGapApplied = true
                 }
             }
-            setlist.setAutoGapApplied(id: entry.id, applied: autoGapApplied)
-            preparedAutoGap = nil
-            manualStopPending = false
-
-            if entry.trimStartSeconds != nil || entry.trimEndSeconds != nil {
-                // Trim: play only [start, end]. Repeat re-loads this entry, so it re-schedules
-                // from startF; duration stays full-file so waveform/progress map to absolute time.
-                let sr = file.fileFormat.sampleRate
-                let startF = AVAudioFramePosition(max(0, (entry.trimStartSeconds ?? 0)) * sr)
-                let endF = AVAudioFramePosition(min(duration, entry.trimEndSeconds ?? duration) * sr)
-                seekOffset = Double(startF) / sr
-                elapsed = seekOffset
-                let count = AVAudioFrameCount(max(0, endF - startF))
-                playerNode.scheduleSegment(file, startingFrame: startF, frameCount: count,
-                                           at: nil, completionCallbackType: .dataPlayedBack) { [weak self] _ in
-                    DispatchQueue.main.async { self?.handleTrackEnd(generation: gen) }
-                }
-            } else {
-                playerNode.scheduleFile(file, at: nil, completionCallbackType: .dataPlayedBack) { [weak self] _ in
-                    DispatchQueue.main.async { self?.handleTrackEnd(generation: gen) }
-                }
-            }
-
-            // Pre-warm silence analysis for the next automatic transition, bound to the
-            // exact (current, next) pair. Analyze firstUnplayed(after:) — the real
-            // transition target — not the immediate neighbour, which may be played.
-            autoGapAnalysisTask?.cancel()
-            let currentID = entry.id
-            let next = setlist.firstUnplayed(after: entry.id)
-            let currentURL = entry.fileURL
-            let nextURL = next?.fileURL
-            let nextID = next?.id
-            // Trim clamps: silence past a trimmed end / before a trimmed start never plays,
-            // so it must not be credited against the auto-gap target (else the gap collapses).
-            let outTrimEnd = entry.trimEndSeconds
-            let outDuration = entry.duration
-            let inTrimStart = next?.trimStartSeconds
-            autoGapAnalysisTask = Task { [weak self] in
-                let cur = await AudioSilenceAnalyzer.shared.analyze(url: currentURL)
-                guard !Task.isCancelled else { return }
-                let lead: Double
-                if let nextURL {
-                    lead = await AudioSilenceAnalyzer.shared.analyze(url: nextURL).silenceAtStart
-                } else {
-                    lead = 0
-                }
-                guard !Task.isCancelled, let nextID else { return }
-                // Effective trailing silence at the trim point: last `silenceAtEnd` of a
-                // `dur`-long file, trimmed to end at `e`. nil duration → conservatively 0.
-                var effTrailing = cur.silenceAtEnd
-                if let e = outTrimEnd {
-                    effTrailing = outDuration.map { max(0, cur.silenceAtEnd - ($0 - e)) } ?? 0
-                }
-                // Effective leading silence after skipping a trimmed start `s`.
-                let effLeading = inTrimStart.map { max(0, lead - $0) } ?? lead
-                await MainActor.run { [weak self] in
-                    guard let self,
-                          self.currentEntryID == currentID,
-                          self.setlist.firstUnplayed(after: currentID)?.id == nextID else { return }
-                    self.preparedAutoGap = PreparedAutoGap(
-                        currentID: currentID,
-                        nextID: nextID,
-                        trailing: effTrailing,
-                        leading: effLeading
-                    )
-                }
-            }
-        } catch {
-            os_log(.error, "TangoDisplay: failed to load %{public}@: %{public}@",
-                   entry.fileURL.path, error.localizedDescription)
-            audioFile = nil
         }
+        setlist.setAutoGapApplied(id: entry.id, applied: autoGapApplied)
+        resetAutoGapAnalysis()
+        manualStopPending = false
+
+        let range = try trackFrames(file, entry: entry, leadingTrim: gapAdjustment?.leadingTrim ?? 0)
+        playableFrames = range
+        if range.lowerBound == 0 && range.upperBound == file.length {
+            try schedule(file, generation: gen)
+        } else {
+            seekOffset = Double(range.lowerBound) / file.fileFormat.sampleRate
+            elapsed = seekOffset
+            try schedule(file, start: range.lowerBound, count: AVAudioFrameCount(clamping: range.count),
+                         generation: gen)
+        }
+
         currentEntryID = entry.id
-        setlist.markPlaying(id: entry.id)
         let resolvedConfigID = entry.pluginConfigurationID ?? configStore.defaultConfigurationID
         if let configID = resolvedConfigID, let config = configStore.configuration(id: configID) {
             if preConfigSnapshot == nil {
@@ -1152,21 +1193,154 @@ final class LocalPlayerSource: NSObject, ObservableObject, MusicPlayerSource {
             preConfigSnapshot = nil
             appliedConfigurationID = nil
         }
-        reportCurrentState()
-        reportPlaylist()
-        onNextTrackUpdate?(setlist.entry(after: entry.id)?.track)
+    }
+
+    private func trackFrames(_ file: AVAudioFile, entry: SetlistEntry,
+                             leadingTrim: Double) throws -> Range<AVAudioFramePosition> {
+        let rate = file.fileFormat.sampleRate
+        let start = max(0, entry.trimStartSeconds ?? 0)
+        let end = min(duration, entry.trimEndSeconds ?? duration)
+        guard start.isFinite, end.isFinite, start < end else {
+            throw PlaybackFailure.track("This track has an invalid start or end time.")
+        }
+        let endFrame = end == duration
+            ? file.length : AVAudioFramePosition(exactly: (end * rate).rounded(.down))
+        guard let startFrame = AVAudioFramePosition(exactly: (start * rate).rounded(.down)),
+              let endFrame, endFrame > startFrame else {
+            throw PlaybackFailure.track("This track’s trim contains no playable audio.")
+        }
+        let removed = AVAudioFramePosition(exactly: (leadingTrim * rate).rounded(.down)) ?? 0
+        let firstFrame = startFrame + min(removed, endFrame - startFrame - 1)
+        return firstFrame..<endFrame
+    }
+
+    // MARK: - Automatic transition timing
+
+    private func gapPair(to next: SetlistEntry) -> GapPair? {
+        guard let id = currentEntryID, let file = audioFile, let range = playableFrames else { return nil }
+        let rate = file.fileFormat.sampleRate
+        return GapPair(currentID: id, currentURL: file.url,
+                       currentStart: Double(range.lowerBound) / rate, currentEnd: Double(range.upperBound) / rate,
+                       nextID: next.id, nextURL: next.fileURL, nextStart: next.trimStartSeconds,
+                       nextEnd: next.trimEndSeconds, measureMaximum: settings.autoGapMaximum != nil)
+    }
+
+    private func refreshAutoGapAnalysis() {
+        guard settings.autoGapEnabled, let id = currentEntryID, let file = audioFile,
+              let next = setlist.firstUnplayed(after: id), let pair = gapPair(to: next) else {
+            resetAutoGapAnalysis()
+            return
+        }
+        guard pair != analyzedGapPair else { return }
+        resetAutoGapAnalysis()
+        analyzedGapPair = pair
+        let duration = Double(file.length) / file.fileFormat.sampleRate
+        autoGapAnalysisTask = Task { @MainActor [weak self] in
+            let analyzer = AudioSilenceAnalyzer.shared
+            let current = await analyzer.analyze(url: pair.currentURL)
+            guard !Task.isCancelled else { return }
+            let incoming = await analyzer.analyze(url: pair.nextURL)
+            guard !Task.isCancelled, self?.analyzedGapPair == pair else { return }
+
+            self?.preparedAutoGap = PreparedAutoGap(currentID: pair.currentID, nextID: pair.nextID,
+                trailing: max(0, current.silenceAtEnd - max(0, duration - pair.currentEnd)),
+                leading: max(0, incoming.silenceAtStart - (pair.nextStart ?? 0)))
+
+            guard pair.measureMaximum,
+                  let trailing = await analyzer.quietEdge(of: pair.currentURL,
+                      from: pair.currentStart, to: pair.currentEnd, edge: .trailing),
+                  !Task.isCancelled,
+                  let leading = await analyzer.quietEdge(of: pair.nextURL,
+                      from: pair.nextStart, to: pair.nextEnd, edge: .leading),
+                  !Task.isCancelled, self?.analyzedGapPair == pair else { return }
+
+            self?.boundedAutoGap = PreparedAutoGap(currentID: pair.currentID, nextID: pair.nextID,
+                                                   trailing: trailing, leading: leading)
+            self?.checkAutoGapCutoff()
+        }
+    }
+
+    private func resetAutoGapAnalysis() {
+        autoGapAnalysisTask?.cancel()
+        autoGapAnalysisTask = nil
+        cancelAutoGapCutoff()
+        analyzedGapPair = nil
+        preparedAutoGap = nil
+        boundedAutoGap = nil
+    }
+
+    private func cancelAutoGapCutoff() {
+        autoGapCutoffTask?.cancel()
+        autoGapCutoffTask = nil
+    }
+
+    private func boundedGap(to next: SetlistEntry, outgoingTrim: Double = 0) -> PreparedAutoGap.Adjustment? {
+        guard let maximum = settings.autoGapMaximum, let id = currentEntryID,
+              !next.autoGapIgnored(isFirstTrack: false, ignoreFirstTrack: settings.autoGapIgnoreFirstTrack),
+              let pair = gapPair(to: next), pair == analyzedGapPair else { return nil }
+        return boundedAutoGap?.adjustment(currentID: id, nextID: next.id, minimum: settings.autoGapDuration,
+                                          maximum: maximum, outgoingTrimApplied: outgoingTrim)
+    }
+
+    private func checkAutoGapCutoff() {
+        guard autoGapCutoffTask == nil, isActivePlaying, !silencePending, !isChangingDevice,
+              engineRecoveryGeneration == nil, audioEngine.isRunning, playerNode.isPlaying,
+              let id = currentEntryID, id != setlist.stopAfterEntryID,
+              let current = setlist.entries.first(where: { $0.id == id }), !current.repeatTrack,
+              !(current.isPerformance && settings.stopAfterEachPerformanceTrack),
+              let next = setlist.firstUnplayed(after: id),
+              let adjustment = boundedGap(to: next), adjustment.trailingTrim > 0,
+              let edges = boundedAutoGap, let pair = analyzedGapPair,
+              let file = audioFile, let time = playerNode.lastRenderTime, time.isSampleTimeValid,
+              let playerTime = playerNode.playerTime(forNodeTime: time)
+        else { return }
+
+        let position = seekOffset + Double(max(0, playerTime.sampleTime - AVAudioFramePosition(currentPaddingFrames)))
+            / file.fileFormat.sampleRate
+        let quietStart = pair.currentEnd - edges.trailing
+        let deadline = pair.currentEnd - adjustment.trailingTrim
+        // Leave a small margin for main-thread scheduling and the audio render clock.
+        let cutoff = max(quietStart, deadline - 0.035)
+        if position >= cutoff {
+            // After a missed deadline, leave the original schedule and minimum-gap behavior in place.
+            guard position <= deadline + 0.015 else { return }
+            advance(bypassAutoGap: false, naturalEnd: true, outgoingTrim: pair.currentEnd - position)
+            return
+        }
+
+        let delay = cutoff - position
+        guard delay <= 0.75 else { return }  // The progress timer will come back closer to the end.
+        let generation = scheduleGeneration
+        autoGapCutoffTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(max(0.005, delay)))
+            guard !Task.isCancelled, let self else { return }
+            self.autoGapCutoffTask = nil
+            guard self.scheduleGeneration == generation else { return }
+            self.checkAutoGapCutoff()
+        }
+    }
+
+    private func scheduleGap(_ buffer: AVAudioPCMBuffer, entryID: UUID, generation: Int) throws {
+        var reason: NSString?
+        guard TDTryAudioPlayerScheduleBuffer(playerNode, buffer, { [weak self] in
+            DispatchQueue.main.async {
+                guard let self, self.scheduleGeneration == generation else { return }
+                self.silencePending = false
+                self.setlist.setAutoGapApplied(id: entryID, applied: false)
+            }
+        }, &reason) else {
+            throw PlaybackFailure.track((reason as String?) ?? "Couldn’t schedule the audio gap.")
+        }
     }
 
     private func handleTrackEnd(generation: Int) {
-        guard generation == scheduleGeneration else { return }
-        skipNext()
-    }
-
-    private func makeSilenceBuffer(format: AVAudioFormat, frameCount: AVAudioFrameCount) -> AVAudioPCMBuffer {
-        // AVAudioPCMBuffer is zero-initialized, so this is already silent.
-        let buf = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount)!
-        buf.frameLength = frameCount
-        return buf
+        guard generation == scheduleGeneration, isActivePlaying,
+              audioEngine.isRunning, engineRecoveryGeneration == nil else { return }
+        if playbackProgress?.endedPrematurely(now: ProcessInfo.processInfo.systemUptime) == true {
+            recoverPlaybackFailure(PlaybackFailure.track("The audio stream ended unexpectedly."))
+        } else {
+            advance(bypassAutoGap: false, naturalEnd: true)
+        }
     }
 
     private func currentEntryIsPlayed() -> Bool {
@@ -1240,7 +1414,14 @@ final class LocalPlayerSource: NSObject, ObservableObject, MusicPlayerSource {
         }
     }
 
-    private func connectAudioGraph(format: AVAudioFormat?) {
+    private func connectAudioGraph(format: AVAudioFormat?) throws {
+        func connect(_ source: AVAudioNode, to destination: AVAudioNode, format: AVAudioFormat?) throws {
+            var reason: NSString?
+            guard TDTryAudioEngineConnect(audioEngine, source, destination, format, &reason) else {
+                throw PlaybackFailure.track((reason as String?) ?? "Couldn’t connect the audio graph.")
+            }
+        }
+
         audioEngine.disconnectNodeOutput(playerNode)
         if let unit = declickUnit { audioEngine.disconnectNodeOutput(unit) }
         if let unit = dehumUnit { audioEngine.disconnectNodeOutput(unit) }
@@ -1261,15 +1442,15 @@ final class LocalPlayerSource: NSObject, ObservableObject, MusicPlayerSource {
         // is declick's ~20 ms of latency and a little DSP on every track.
         var preEQ: AVAudioNode = playerNode
         if let unit = declickUnit {
-            audioEngine.connect(preEQ, to: unit, format: format)
+            try connect(preEQ, to: unit, format: format)
             preEQ = unit
         }
         if let unit = dehumUnit {
-            audioEngine.connect(preEQ, to: unit, format: format)
+            try connect(preEQ, to: unit, format: format)
             preEQ = unit
         }
-        audioEngine.connect(preEQ, to: eq, format: format)
-        audioEngine.connect(eq, to: replayGainMixer, format: format)
+        try connect(preEQ, to: eq, format: format)
+        try connect(eq, to: replayGainMixer, format: format)
 
         // AU plugins often don't support mono. Upmix to stereo here so replayGainMixer
         // (AVAudioMixerNode) does the channel conversion before the plugin chain sees any data.
@@ -1304,8 +1485,8 @@ final class LocalPlayerSource: NSObject, ObservableObject, MusicPlayerSource {
         for (id, reason) in failedSlots {
             markSlotFailed(id: id, reason: reason)
         }
-        audioEngine.connect(prev, to: balanceMixer, format: pluginFormat)
-        audioEngine.connect(balanceMixer, to: audioEngine.mainMixerNode, format: pluginFormat)
+        try connect(prev, to: balanceMixer, format: pluginFormat)
+        try connect(balanceMixer, to: audioEngine.mainMixerNode, format: pluginFormat)
     }
 
     private func rewireGraphSafely() {
@@ -1313,38 +1494,39 @@ final class LocalPlayerSource: NSObject, ObservableObject, MusicPlayerSource {
         let savedElapsed = elapsed
         let format = audioFile?.processingFormat
 
+        scheduleGeneration += 1
         playerNode.stop()
         audioEngine.stop()
-        connectAudioGraph(format: format)
 
         // If a plugin in the live chain breaks engine startup (e.g. format incompatibility),
         // drop slots from the end of the live chain one at a time and retry until it starts
         // — this preserves the working portion of the chain.
         while true {
             do {
-                try audioEngine.start()
+                try connectAudioGraph(format: format)
+                try Self.startEngine(audioEngine)
                 break
             } catch {
                 let live = liveChainUnits()
                 guard let last = live.last else {
                     os_log(.error, "TangoDisplay: engine start failed with no live plugins: %{public}@",
                            error.localizedDescription)
-                    try? audioEngine.start()
-                    break
+                    if wasPlaying { recoverPlaybackFailure(error) }
+                    else if audioFile != nil { finishPlaybackAttempt() }
+                    recomputeChainStatus()
+                    return
                 }
                 os_log(.error, "TangoDisplay: engine start failed; disabling slot %{public}@: %{public}@",
                        last.slot.selection.name, error.localizedDescription)
                 markSlotFailed(id: last.slot.id, reason: error.localizedDescription)
                 audioEngine.stop()
-                connectAudioGraph(format: format)
             }
         }
 
         levelMeter.reinstallTap()
         applyBalance(_balance)
         if audioFile != nil {
-            seekTo(savedElapsed)
-            if wasPlaying { startPlayerNode() }
+            seekTo(savedElapsed, resume: wasPlaying)
         }
         recomputeChainStatus()
     }
@@ -1680,9 +1862,9 @@ final class LocalPlayerSource: NSObject, ObservableObject, MusicPlayerSource {
         }
         // KVO on currentPreset catches V2 AU UIs (e.g. AUGraphicEQ "Flat") that bypass the parameter tree.
         runtime.currentPresetObservation = avUnit.auAudioUnit.observe(\.currentPreset, options: [.new]) {
-            [weak self, weak runtime] _, _ in
+            [weak self] _, _ in
             DispatchQueue.main.async {
-                guard let self, let runtime, !runtime.isApplyingPreset else { return }
+                guard let self, let runtime = self.slotRuntimes[slotId], !runtime.isApplyingPreset else { return }
                 runtime.activePresetID = nil
                 self.slotActivePresetIDs.removeValue(forKey: slotId)
                 self.updateSlotPresetName(slotId: slotId, name: nil)
@@ -1763,7 +1945,32 @@ final class LocalPlayerSource: NSObject, ObservableObject, MusicPlayerSource {
             .autoconnect()
             .sink { [weak self] _ in self?.updateTime() }
 
+        Publishers.CombineLatest4(settings.$autoGapEnabled, settings.$autoGapDuration,
+                                  settings.$autoGapMaximumEnabled, settings.$autoGapMaximumDuration)
+            .dropFirst()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.cancelAutoGapCutoff()
+                self?.refreshAutoGapAnalysis()
+                self?.checkAutoGapCutoff()
+            }
+            .store(in: &cancellables)
+
+        let workspace = NSWorkspace.shared.notificationCenter
+        workspace.publisher(for: NSWorkspace.didMountNotification)
+            .merge(with: workspace.publisher(for: NSWorkspace.didUnmountNotification))
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.setlist.refreshMediaAvailability() }
+            .store(in: &cancellables)
+
+        setlist.$mediaIssues
+            .dropFirst()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.refreshAutoGapAnalysis() }
+            .store(in: &cancellables)
+
         settings.$builtInOutputDeviceUID
+            .dropFirst()
             .receive(on: DispatchQueue.main)
             .sink { [weak self] uid in self?.applyOutputDevice(uid) }
             .store(in: &cancellables)
@@ -1840,8 +2047,9 @@ final class LocalPlayerSource: NSObject, ObservableObject, MusicPlayerSource {
 
         setlist.$entries
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] entries in
+            .sink { [weak self] _ in
                 guard let self else { return }
+                let entries = self.setlist.entries
                 // Remove early-mark for entries removed from setlist or explicitly unmarked as played.
                 let playedIDs = Set(entries.filter { $0.state == .played }.map(\.id))
                 self.earlyMarkedEntryIDs.formIntersection(playedIDs)
@@ -1859,6 +2067,8 @@ final class LocalPlayerSource: NSObject, ObservableObject, MusicPlayerSource {
                 }
                 if let id = self.currentEntryID,
                    !entries.contains(where: { $0.id == id }) {
+                    self.isHeld = false
+                    self.scheduleGeneration += 1
                     self.currentEntryID = nil
                     self.isActivePlaying = false
                     self.replayGainStatus = ""
@@ -1895,7 +2105,7 @@ final class LocalPlayerSource: NSObject, ObservableObject, MusicPlayerSource {
                     }
                 }
                 if self.currentEntryID == nil, self.audioFile == nil,
-                   let firstQueued = entries.first(where: { $0.state == .queued }) {
+                   let firstQueued = entries.first(where: { $0.state == .queued && self.setlist.isPlayable($0) }) {
                     self.currentEntryID = firstQueued.id
                     self.elapsed = 0
                     self.duration = firstQueued.duration ?? 0
@@ -1907,7 +2117,7 @@ final class LocalPlayerSource: NSObject, ObservableObject, MusicPlayerSource {
                 // current entry. Promote the new first-queued entry to be the current one.
                 if let id = self.currentEntryID, self.audioFile == nil, !self.isActivePlaying,
                    entries.first(where: { $0.id == id })?.state == .queued,
-                   let firstQueued = entries.first(where: { $0.state == .queued }),
+                   let firstQueued = entries.first(where: { $0.state == .queued && self.setlist.isPlayable($0) }),
                    firstQueued.id != id {
                     self.currentEntryID = firstQueued.id
                     self.elapsed = 0
@@ -1916,6 +2126,7 @@ final class LocalPlayerSource: NSObject, ObservableObject, MusicPlayerSource {
                     self.reportPlaylist()
                     self.onNextTrackUpdate?(self.setlist.entry(after: firstQueued.id)?.track)
                 }
+                self.refreshAutoGapAnalysis()
                 // Always report so AppState recalculates tanda position on any entries
                 // change, including pure reorders that don't trigger any branch above.
                 self.reportPlaylist()
@@ -1931,16 +2142,30 @@ final class LocalPlayerSource: NSObject, ObservableObject, MusicPlayerSource {
     // MARK: - Private: time update
 
     private func updateTime() {
-        guard isActivePlaying,
-              let file = audioFile,
-              let nodeTime = playerNode.lastRenderTime,
-              nodeTime.isSampleTimeValid,
-              let playerTime = playerNode.playerTime(forNodeTime: nodeTime) else { return }
+        guard isActivePlaying, !isChangingDevice, engineRecoveryGeneration == nil,
+              let file = audioFile else { return }
+        let playbackTime: AVAudioTime?
+        if playerNode.isPlaying, let nodeTime = playerNode.lastRenderTime, nodeTime.isSampleTimeValid {
+            playbackTime = playerNode.playerTime(forNodeTime: nodeTime)
+        } else {
+            playbackTime = nil
+        }
+        if playbackProgress?.hasStalled(sampleTime: playbackTime?.sampleTime,
+                                         now: ProcessInfo.processInfo.systemUptime) == true {
+            if audioEngine.isRunning {
+                recoverPlaybackFailure(PlaybackFailure.track("Playback stopped unexpectedly."))
+            } else {
+                interruptForUnavailableOutput()
+                retryOutputDevice()
+            }
+            return
+        }
+        guard let playerTime = playbackTime else { return }
 
         guard !silencePending else { elapsed = 0; return }
         let sampleRate = file.fileFormat.sampleRate
         guard sampleRate > 0 else { return }
-        let audioFrames = max(0, playerTime.sampleTime - audioStartSampleTime)
+        let audioFrames = max(0, playerTime.sampleTime - AVAudioFramePosition(currentPaddingFrames))
         let newElapsed = seekOffset + Double(audioFrames) / sampleRate
         elapsed = max(0, min(newElapsed, duration))
         duration = Double(file.length) / sampleRate
@@ -1955,6 +2180,7 @@ final class LocalPlayerSource: NSObject, ObservableObject, MusicPlayerSource {
             setlist.markPlayed(id: id)
             reportPlaylist()
         }
+        checkAutoGapCutoff()
     }
 
     /// Re-sends the current track and playlist — for when a row's tags change under the

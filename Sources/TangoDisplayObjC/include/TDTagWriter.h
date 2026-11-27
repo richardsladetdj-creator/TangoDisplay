@@ -16,10 +16,16 @@ extern "C" {
 /// TITLE, ARTIST, GENRE, DATE, COMMENT, ALBUMARTIST, GROUPING. An empty value removes
 /// the field; keys absent from `tags` are left as they are.
 /// Returns NO with *outError set when the file can't be opened, has no taggable
-/// container, or the save fails. Callers wanting atomicity write to a copy first.
+/// container, or the save fails. After saving and reopening, outFieldIssues
+/// contains a reason for each requested field that did not round-trip.
+/// Callers wanting atomicity write to a copy first.
 BOOL TDWriteTags(NSString *path,
                  NSDictionary<NSString *, NSString *> *tags,
+                 NSDictionary<NSString *, NSString *> * _Nullable * _Nullable outFieldIssues,
                  NSString * _Nullable * _Nullable outError);
+
+/// Returns the first embedded value of each TagLib property, or nil for an unreadable file.
+NSDictionary<NSString *, NSString *> * _Nullable TDReadTags(NSString *path);
 
 #ifdef __cplusplus
 }

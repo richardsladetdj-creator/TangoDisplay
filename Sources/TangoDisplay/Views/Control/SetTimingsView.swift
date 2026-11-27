@@ -12,9 +12,9 @@ extension SetTimingsLayout {
     /// Minimum content size (padding-inclusive) for each layout mode.
     var minContentSize: CGSize {
         switch self {
-        case .grid:       CGSize(width: 480, height: 440)
-        case .horizontal: CGSize(width: 720, height: 200)
-        case .vertical:   CGSize(width: 240, height: 560)
+        case .grid:       CGSize(width: 480, height: 560)
+        case .horizontal: CGSize(width: 880, height: 200)
+        case .vertical:   CGSize(width: 240, height: 660)
         }
     }
 }
@@ -49,14 +49,19 @@ struct SetTimingsView: View {
             GridRow {
                 timingCard(icon: "clock", title: "Total Set Time",
                            value: formatDuration(setlist.totalPlaylistDuration))
-                timingCard(icon: "list.bullet", title: "Tracks Remaining",
-                           value: "\(unplayedCount)")
+                timingCard(icon: "hourglass", title: "Set Time Left",
+                           value: formatDuration(danceTimeLeft))
             }
             GridRow {
+                timingCard(icon: "list.bullet", title: "Tracks Remaining",
+                           value: "\(unplayedCount)")
                 timingCard(icon: "forward.end.fill", title: "Next Cortina",
                            value: formatDuration(timeUntilNextCortina))
+            }
+            GridRow {
                 timingCard(icon: "flag.fill", title: "Ends At",
                            value: formattedEndTime)
+                    .gridCellColumns(2)
             }
             GridRow {
                 currentTrackCard(vertical: false)
@@ -70,6 +75,8 @@ struct SetTimingsView: View {
             HStack(spacing: 12) {
                 timingCard(icon: "clock", title: "Total Set Time",
                            value: formatDuration(setlist.totalPlaylistDuration))
+                timingCard(icon: "hourglass", title: "Set Time Left",
+                           value: formatDuration(danceTimeLeft))
                 timingCard(icon: "list.bullet", title: "Tracks Remaining",
                            value: "\(unplayedCount)")
                 timingCard(icon: "forward.end.fill", title: "Next Cortina",
@@ -91,6 +98,8 @@ struct SetTimingsView: View {
                            value: currentTrackCountdown)
                 timingCard(icon: "clock", title: "Total Set Time",
                            value: formatDuration(setlist.totalPlaylistDuration))
+                timingCard(icon: "hourglass", title: "Set Time Left",
+                           value: formatDuration(danceTimeLeft))
                 timingCard(icon: "list.bullet", title: "Tracks Remaining",
                            value: "\(unplayedCount)")
                 timingCard(icon: "forward.end.fill", title: "Next Cortina",
@@ -265,6 +274,24 @@ struct SetTimingsView: View {
 
     private var unplayedCount: Int {
         setlist.entries.filter { $0.state != .played }.count
+    }
+
+    /// Dance time still to play: tango, vals and milonga tracks (anything the cortina
+    /// detector doesn't flag) that aren't marked as played. Cortinas are excluded.
+    /// The current track counts only its remaining time.
+    private var danceTimeLeft: TimeInterval {
+        let detector = settings.makeDetector()
+        var remaining: TimeInterval = 0
+        for entry in setlist.entries where entry.state != .played {
+            guard !detector.isCortina(genre: entry.track.genre) else { continue }
+            let duration = entry.duration ?? 0
+            if entry.id == player.currentEntryID {
+                remaining += max(0, duration - player.elapsed)
+            } else {
+                remaining += duration
+            }
+        }
+        return remaining
     }
 
     private var timeUntilNextCortina: TimeInterval {

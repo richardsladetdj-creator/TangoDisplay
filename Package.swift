@@ -27,12 +27,14 @@ let package = Package(
             exclude: ["shellac/README.md", "shellac/LICENSE.txt"],
             publicHeadersPath: "include"
         ),
+        .target(name: "TangoDisplayTagging", dependencies: ["TangoDisplayObjC"]),
         // Main app executable
         .executableTarget(
             name: "TangoDisplay",
             dependencies: [
                 "TangoDisplayCore",
                 "TangoDisplayObjC",
+                "TangoDisplayTagging",
                 .product(name: "Sparkle", package: "Sparkle")
             ],
             path: "Sources/TangoDisplay",
@@ -48,8 +50,9 @@ let package = Package(
         // Usage: swift run TangoDisplayTests
         .executableTarget(
             name: "TangoDisplayTests",
-            dependencies: ["TangoDisplayCore", "TangoDisplayObjC"],
-            path: "Tests/TangoDisplayTests"
+            dependencies: ["TangoDisplayCore", "TangoDisplayObjC", "TangoDisplayTagging"],
+            path: "Tests/TangoDisplayTests",
+            resources: [.copy("TagFixtures")]
         )
     ]
 )

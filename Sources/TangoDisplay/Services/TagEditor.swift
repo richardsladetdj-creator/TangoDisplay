@@ -1,81 +1,84 @@
 import AppKit
 import Foundation
-import TangoDisplayObjC
+import TangoDisplayCore
+import TangoDisplayTagging
 
-/// Writes tags into a setlist track's file — Setlist's "Edit Tags…". The TagRoom design:
-/// write into a temp copy beside the file, then swap it in atomically, so a crash or full
-/// disk never leaves a half-written file. The swap keeps the old inode alive, so a track
-/// that is playing carries on from its open handle.
-///
-/// Tracks dropped from Music are copies in our app-support cache; for those the Music
-/// library's own file is rewritten too, and Music is told to `refresh` it.
 enum TagEditor {
-    struct Failure: LocalizedError { let errorDescription: String? }
+    struct Result: Sendable {
+        let local: TagFileWriter.Result
+        var music: TagFileWriter.Result?
+        var musicWarnings: [String] = []
+    }
 
-    /// TagLib writes all of these; `.caf` has no tag container it supports.
+    private struct Failure: LocalizedError { let errorDescription: String? }
+    private static let worker = Worker()
+
     static func canWrite(_ url: URL) -> Bool {
         let fm = FileManager.default
+        let destination = url.resolvingSymlinksInPath()
         return ["mp3", "m4a", "aiff", "aif", "wav", "flac", "opus"].contains(url.pathExtension.lowercased())
-            && fm.isWritableFile(atPath: url.path)
-            && fm.isWritableFile(atPath: url.deletingLastPathComponent().path)   // temp copy lives here
+            && fm.isWritableFile(atPath: destination.path)
+            && fm.isWritableFile(atPath: destination.deletingLastPathComponent().path)
     }
 
-    /// Writes `changes` (TagLib property names → value, "" clears) to the entry's file and,
-    /// for a Music drop, to the library original. Throws only if the setlist file itself
-    /// wasn't written; a problem with the Music side comes back as a warning instead.
-    static func apply(_ changes: [String: String], to entry: SetlistEntry) async throws -> String? {
-        let fileURL = entry.fileURL
-        // Spliced into AppleScript below, so accept only the hex form Music hands out.
-        let musicID = entry.musicPersistentID.flatMap { $0.allSatisfy(\.isHexDigit) ? $0 : nil }
-        return try await Task.detached(priority: .userInitiated) {
-            try write(changes, to: fileURL)
-            guard let musicID else { return nil }
-            guard let original = musicLocation(persistentID: musicID) else {
-                return "Tags saved, but the track couldn't be found in Music — its library file is unchanged."
+    static func apply(_ changes: [String: String], to entry: SetlistEntry) async throws -> Result {
+        try await worker.apply(changes, to: entry.fileURL, musicID: entry.musicPersistentID)
+    }
+
+    // Serialize whole-file edits, including when two setlist rows refer to the same file.
+    private actor Worker {
+        func apply(_ changes: [String: String], to file: URL, musicID: String?) throws -> Result {
+            var result = Result(local: try TagFileWriter.write(changes, to: file))
+            guard !result.local.written.isEmpty, let musicID else { return result }
+            guard !musicID.isEmpty, musicID.utf8.allSatisfy({
+                (48...57).contains($0) || (65...70).contains($0) || (97...102).contains($0)
+            }) else {
+                result.musicWarnings.append("Music’s library file was not updated because the track ID is invalid.")
+                return result
             }
-            if original.standardizedFileURL != fileURL.standardizedFileURL {
-                do { try write(changes, to: original) } catch {
-                    return "Tags saved, but Music's library file couldn't be written: \(error.localizedDescription)"
+
+            let musicTrack = "first track of library playlist 1 whose persistent ID is \"\(musicID)\""
+            let original: URL
+            do {
+                guard let path = try runMusic("POSIX path of (get location of (\(musicTrack)))").stringValue,
+                      !path.isEmpty else { throw Failure(errorDescription: "The track has no local file.") }
+                original = URL(fileURLWithPath: path)
+            } catch {
+                result.musicWarnings.append("Couldn’t find Music’s library file. \(error.localizedDescription)")
+                return result
+            }
+
+            if original.resolvingSymlinksInPath() != file.resolvingSymlinksInPath() {
+                do {
+                    let written = changes.filter { result.local.written.contains($0.key) }
+                    let music = try TagFileWriter.write(written, to: original)
+                    result.music = music
+                    guard !music.written.isEmpty else { return result }
+                } catch {
+                    result.musicWarnings.append("Couldn’t update Music’s library file. \(error.localizedDescription)")
+                    return result
                 }
+            } else {
+                result.music = result.local
             }
-            runMusic("refresh (first track of library playlist 1 whose persistent ID is \"\(musicID)\")")
-            return nil
-        }.value
-    }
 
-    static func write(_ changes: [String: String], to url: URL) throws {
-        let fm = FileManager.default
-        // Keep the extension: TagLib picks the format from it.
-        let temp = url.deletingLastPathComponent()
-            .appendingPathComponent(".tangodisplay-\(UUID().uuidString).\(url.pathExtension)")
-        try fm.copyItem(at: url, to: temp)
-        do {
-            var err: NSString?
-            guard TDWriteTags(temp.path, changes, &err) else {
-                throw Failure(errorDescription: (err as String?) ?? "Tag write failed")
+            do {
+                _ = try runMusic("refresh (\(musicTrack))")
+            } catch {
+                result.musicWarnings.append("Music’s file was updated, but Music couldn’t refresh its library. \(error.localizedDescription)")
             }
-            _ = try fm.replaceItemAt(url, withItemAt: temp)
-        } catch {
-            try? fm.removeItem(at: temp)
-            throw error
+            return result
         }
-    }
 
-    // MARK: - Music
-
-    /// The Music library file for a persistent ID (same %016llX form AppleScript uses).
-    /// ponytail: launches Music if it isn't running — ITLibrary avoids that but costs a ~5s
-    /// full-library location scan. Swap in if launching Music mid-milonga bothers anyone.
-    private static func musicLocation(persistentID: String) -> URL? {
-        let path = runMusic("POSIX path of (get location of (first track of library playlist 1 whose persistent ID is \"\(persistentID)\"))")
-        return path.flatMap { $0.isEmpty ? nil : URL(fileURLWithPath: $0) }
-    }
-
-    @discardableResult
-    private static func runMusic(_ statement: String) -> String? {
-        var errorInfo: NSDictionary?
-        let source = "tell application \"Music\"\n\(statement)\nend tell"
-        let result = NSAppleScript(source: source)?.executeAndReturnError(&errorInfo)
-        return errorInfo == nil ? result?.stringValue : nil
+        private func runMusic(_ statement: String) throws -> NSAppleEventDescriptor {
+            var errorInfo: NSDictionary?
+            let source = "tell application \"Music\"\n\(statement)\nend tell"
+            guard let result = NSAppleScript(source: source)?.executeAndReturnError(&errorInfo),
+                  errorInfo == nil else {
+                let message = errorInfo?["NSAppleScriptErrorMessage"] as? String
+                throw Failure(errorDescription: message ?? "Music returned no AppleScript result.")
+            }
+            return result
+        }
     }
 }

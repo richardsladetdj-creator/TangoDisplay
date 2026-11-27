@@ -1,100 +1,38 @@
 import AppKit
 import AVFoundation
-import AudioToolbox
 import Combine
 import Foundation
 import iTunesLibrary
 import os.log
 import TangoDisplayCore
-
-enum SetlistEntryState: String, Codable {
-    case queued, playing, paused, played
-}
-
-enum TagColor: String, Codable, CaseIterable {
-    case none, red, orange, yellow, green, blue, purple
-}
-
-struct SetlistEntry: Identifiable, Codable {
-    let id: UUID
-    let fileURL: URL
-    var track: Track
-    var state: SetlistEntryState
-    var duration: TimeInterval?
-    var autoGapOverride: Bool? = nil   // nil = follow global rule; true = force skip; false = force apply
-    var ignoresAutoFade: Bool = false
-    var isLastTanda: Bool = false      // marks this cortina as the last-tanda trigger
-    var isPerformance: Bool = false    // track is part of a guest performance
-    var repeatTrack: Bool = false      // non-dance track loops until stop-after or un-marked
-    var pluginConfigurationID: UUID? = nil
-    var tagColor: TagColor = .none
-    var trimStartSeconds: Double? = nil   // nil = play from file start
-    var trimEndSeconds: Double? = nil      // nil = play to file end
-    var restorationOverride: Bool? = nil   // nil = follow global rule; true = force skip; false = force apply
-    var upcomingOverride: UpcomingOverride? = nil  // cortina only: DJ-edited "Coming Up" details for the next tanda
-    var musicPersistentID: String? = nil   // set for Music drags — lets Edit Tags reach the library original
-    var autoGapApplied: Bool = false   // transient: true while auto-gap preroll is scheduled before this track
-
-    enum CodingKeys: String, CodingKey {
-        case id, fileURL, track, state, duration, autoGapOverride, ignoresAutoFade, isLastTanda, isPerformance, repeatTrack, pluginConfigurationID, tagColor, trimStartSeconds, trimEndSeconds, restorationOverride, upcomingOverride, musicPersistentID
-        // autoGapApplied is intentionally excluded — reset each playback session
-    }
-
-    // Legacy one-directional flag (pre-tri-state); read for migration only.
-    private enum LegacyKeys: String, CodingKey { case ignoresAutoGap }
-
-    // Effective "gap skipped before this track". Assumes auto-gap is globally enabled.
-    func autoGapIgnored(isFirstTrack: Bool, ignoreFirstTrack: Bool) -> Bool {
-        autoGapOverride ?? (ignoreFirstTrack && isFirstTrack)
-    }
-
-    /// Effective "restore this track". `globalDefault` already folds in the master
-    /// switch and the cortina rule; an explicit override outranks both.
-    func restorationApplied(globalDefault: Bool) -> Bool {
-        if let o = restorationOverride { return !o }
-        return globalDefault
-    }
-
-    init(id: UUID = UUID(), fileURL: URL, track: Track, state: SetlistEntryState = .queued) {
-        self.id = id
-        self.fileURL = fileURL
-        self.track = track
-        self.state = state
-    }
-
-    init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        id = try c.decode(UUID.self, forKey: .id)
-        fileURL = try c.decode(URL.self, forKey: .fileURL)
-        track = try c.decode(Track.self, forKey: .track)
-        state = try c.decode(SetlistEntryState.self, forKey: .state)
-        duration = try c.decodeIfPresent(TimeInterval.self, forKey: .duration)
-        if let o = try c.decodeIfPresent(Bool.self, forKey: .autoGapOverride) {
-            autoGapOverride = o
-        } else {
-            let legacy = try decoder.container(keyedBy: LegacyKeys.self)
-            autoGapOverride = (try legacy.decodeIfPresent(Bool.self, forKey: .ignoresAutoGap) == true) ? true : nil
-        }
-        ignoresAutoFade = try c.decodeIfPresent(Bool.self, forKey: .ignoresAutoFade) ?? false
-        isLastTanda = try c.decodeIfPresent(Bool.self, forKey: .isLastTanda) ?? false
-        isPerformance = try c.decodeIfPresent(Bool.self, forKey: .isPerformance) ?? false
-        repeatTrack = try c.decodeIfPresent(Bool.self, forKey: .repeatTrack) ?? false
-        pluginConfigurationID = try c.decodeIfPresent(UUID.self, forKey: .pluginConfigurationID) ?? nil
-        tagColor = try c.decodeIfPresent(TagColor.self, forKey: .tagColor) ?? .none
-        trimStartSeconds = try c.decodeIfPresent(Double.self, forKey: .trimStartSeconds)
-        trimEndSeconds = try c.decodeIfPresent(Double.self, forKey: .trimEndSeconds)
-        restorationOverride = try c.decodeIfPresent(Bool.self, forKey: .restorationOverride)
-        upcomingOverride = try c.decodeIfPresent(UpcomingOverride.self, forKey: .upcomingOverride)
-        musicPersistentID = try c.decodeIfPresent(String.self, forKey: .musicPersistentID)
-        autoGapApplied = false
-    }
-}
+import TangoDisplayTagging
 
 enum DuplicateSessionDecision { case alwaysAdd, neverAdd }
+
+/// Everything needed to put deleted rows back where they were.
+struct SetlistRemoval {
+    /// Removed entries in original order, each with the surviving entry that followed it.
+    fileprivate let items: [(entry: SetlistEntry, anchorID: UUID?)]
+    fileprivate let stopAfterID: UUID?
+    var ids: Set<UUID> { Set(items.map(\.entry.id)) }
+    var count: Int { items.count }
+}
+
+/// Setlist order before a reorder, plus each row's state so the undo can refuse
+/// once playback has moved on (restoring an old order then would scramble the set).
+struct SetlistReorder {
+    fileprivate let order: [UUID]
+    fileprivate let states: [UUID: SetlistEntryState]
+}
 
 final class SetlistManager: ObservableObject {
     @Published private(set) var entries: [SetlistEntry] = []
     @Published var stopAfterEntryID: UUID?
+    @Published private(set) var mediaIssues: [UUID: String] = [:]
+    @Published private(set) var persistenceError: String?
+    @Published private(set) var recoveryNotice: String?
+    /// Tandas folded in the setlist view, keyed by the tanda's first entry ID. Session-only.
+    @Published var collapsedTandaIDs: Set<UUID> = []
     private(set) var duplicateSessionDecision: DuplicateSessionDecision? = nil
 
     func setDuplicateSessionDecision(_ decision: DuplicateSessionDecision?) {
@@ -105,14 +43,18 @@ final class SetlistManager: ObservableObject {
         entries.compactMap { $0.duration }.reduce(0, +)
     }
 
-    private let saveURL: URL = {
-        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        let dir = support.appendingPathComponent("TangoDisplay")
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        return dir.appendingPathComponent("setlist.json")
-    }()
+    private let store: SetlistStore
+    private var preserveSnapshot = false
+    private var hasUnsavedChanges = false
+    private var missingMediaIDs: Set<UUID> = []
+    private var mediaScanGeneration = 0
+    private var playbackErrors: [UUID: String] = [:]
 
-    init() { load() }
+    init(storeURL: URL? = nil) {
+        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        store = SetlistStore(url: storeURL ?? support.appendingPathComponent("TangoDisplay/setlist.json"))
+        load()
+    }
 
     // MARK: - Queue mutations (all called on main)
 
@@ -151,7 +93,7 @@ final class SetlistManager: ObservableObject {
                 // instant — draggingEntered started the scan about a second ago.
                 var trim: (start: Double?, end: Double?)? = nil
                 if let musicID { trim = await SetlistManager.musicTrimAsync(id: musicID) }
-                guard let i = self.entries.firstIndex(where: { $0.id == id }) else { return }
+                guard let i = self.entries.firstIndex(where: { $0.id == id && $0.fileURL == url }) else { return }
                 self.entries[i].track = track
                 if let trim {
                     self.entries[i].trimStartSeconds = trim.start
@@ -171,15 +113,52 @@ final class SetlistManager: ObservableObject {
         loadMissingDurations()
     }
 
-    func remove(at offsets: IndexSet) {
-        if let stopID = stopAfterEntryID, offsets.map({ entries[$0].id }).contains(stopID) {
-            stopAfterEntryID = nil
-        }
-        entries.remove(atOffsets: offsets)
-        save()
+    @discardableResult
+    func remove(at offsets: IndexSet) -> SetlistRemoval? {
+        remove(ids: Set(offsets.compactMap { entries.indices.contains($0) ? entries[$0].id : nil }))
     }
 
-    func move(from source: IndexSet, to destination: Int) {
+    /// Re-inserts rows removed by `remove(ids:)`. Returns false (and changes nothing)
+    /// if any of them is back in the setlist already.
+    @discardableResult
+    func restore(_ removal: SetlistRemoval) -> Bool {
+        let present = Set(entries.map(\.id))
+        guard !removal.items.isEmpty, removal.ids.isDisjoint(with: present) else { return false }
+        for item in removal.items {
+            var entry = item.entry
+            // Deleting the current row stopped playback — it comes back as queued.
+            if entry.state == .playing || entry.state == .paused { entry.state = .queued }
+            let index = item.anchorID.flatMap { id in entries.firstIndex(where: { $0.id == id }) }
+                ?? entries.count
+            entries.insert(entry, at: index)
+        }
+        if stopAfterEntryID == nil, let stopID = removal.stopAfterID { stopAfterEntryID = stopID }
+        save()
+        loadMissingDurations()
+        refreshMediaAvailability()
+        return true
+    }
+
+    private func reorderSnapshot() -> SetlistReorder {
+        SetlistReorder(order: entries.map(\.id),
+                       states: Dictionary(entries.map { ($0.id, $0.state) }, uniquingKeysWith: { a, _ in a }))
+    }
+
+    /// Puts the setlist back in the order captured by `move`. Returns the order it
+    /// replaced (for redo), or nil if rows were added/removed or any row's playback
+    /// state changed since.
+    @discardableResult
+    func revert(_ reorder: SetlistReorder) -> SetlistReorder? {
+        let current = reorderSnapshot()
+        guard current.states == reorder.states, current.order != reorder.order else { return nil }
+        let byID = Dictionary(entries.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        entries = reorder.order.compactMap { byID[$0] }
+        save()
+        return current
+    }
+
+    @discardableResult
+    func move(from source: IndexSet, to destination: Int) -> SetlistReorder? {
         // Filter out played/playing entries — they cannot be reordered.
         // Using filter (not reject) handles the case where a playing track is
         // selected alongside queued tracks and SwiftUI includes all selected
@@ -188,24 +167,28 @@ final class SetlistManager: ObservableObject {
             let s = entries[$0].state
             return s == .queued || s == .paused
         })
-        guard !movable.isEmpty else { return }
+        guard !movable.isEmpty else { return nil }
+        let before = reorderSnapshot()
         entries.move(fromOffsets: movable, toOffset: destination)
+        guard entries.map(\.id) != before.order else { return nil }
         save()
+        return before
     }
 
     func clear() {
         stopAfterEntryID = nil
         duplicateSessionDecision = nil
         entries.removeAll()
+        applyMediaScan(unreadable: [])
         save()
     }
 
     // MARK: - Playback state tracking
 
-    func markPlaying(id: UUID) {
+    func setCurrentEntry(id: UUID, paused: Bool = false) {
         for i in entries.indices {
             if entries[i].id == id {
-                entries[i].state = .playing
+                entries[i].state = paused ? .paused : .playing
             } else if entries[i].state == .playing || entries[i].state == .paused {
                 entries[i].state = .played
             }
@@ -325,12 +308,19 @@ final class SetlistManager: ObservableObject {
         entries[i].autoGapApplied = applied
     }
 
-    func remove(ids: Set<UUID>) {
-        if let stopID = stopAfterEntryID, ids.contains(stopID) {
-            stopAfterEntryID = nil
+    @discardableResult
+    func remove(ids: Set<UUID>) -> SetlistRemoval? {
+        var items: [(entry: SetlistEntry, anchorID: UUID?)] = []
+        for (i, entry) in entries.enumerated() where ids.contains(entry.id) {
+            let anchor = entries[(i + 1)...].first { !ids.contains($0.id) }?.id
+            items.append((entry, anchor))
         }
+        guard !items.isEmpty else { return nil }
+        let removedStop = stopAfterEntryID.flatMap { ids.contains($0) ? $0 : nil }
+        if removedStop != nil { stopAfterEntryID = nil }
         entries.removeAll { ids.contains($0.id) }
         save()
+        return SetlistRemoval(items: items, stopAfterID: removedStop)
     }
 
     func entry(after id: UUID) -> SetlistEntry? {
@@ -340,7 +330,13 @@ final class SetlistManager: ObservableObject {
 
     func firstUnplayed(after id: UUID) -> SetlistEntry? {
         guard let i = entries.firstIndex(where: { $0.id == id }) else { return nil }
-        return entries[(i + 1)...].first(where: { $0.state != .played })
+        return entries[(i + 1)...].first(where: isPlayable)
+    }
+
+    var firstPlayable: SetlistEntry? { entries.first(where: isPlayable) }
+
+    func isPlayable(_ entry: SetlistEntry) -> Bool {
+        entry.state != .played && mediaIssues[entry.id] == nil
     }
 
     func entry(before id: UUID) -> SetlistEntry? {
@@ -351,23 +347,132 @@ final class SetlistManager: ObservableObject {
     // MARK: - Persistence
 
     private func save() {
-        guard let data = try? JSONEncoder().encode(entries) else { return }
-        try? data.write(to: saveURL, options: .atomic)
+        hasUnsavedChanges = true
+        retryPersistence()
     }
 
     private func load() {
-        guard let data = try? Data(contentsOf: saveURL),
-              var decoded = try? JSONDecoder().decode([SetlistEntry].self, from: data) else { return }
-        decoded = decoded.filter { FileManager.default.fileExists(atPath: $0.fileURL.path) }
-        for i in decoded.indices where decoded[i].state == .playing || decoded[i].state == .paused {
-            decoded[i].state = .queued
+        let decoded: [SetlistEntry]
+        do {
+            decoded = try store.load()
+        } catch {
+            preserveSnapshot = true
+            persistenceError = "Couldn’t open the saved setlist. \(error.localizedDescription)"
+            return
         }
+        preserveSnapshot = false
+        persistenceError = nil
         entries = decoded
-        loadMissingDurations()
-        reloadEmptyMetadata()
-        if !UserDefaults.standard.bool(forKey: "setlistGroupingMigrationV1") {
-            loadMissingGroupings()
+        // These skip entries known to be missing, so start them once the scan has landed.
+        refreshMediaAvailability { [weak self] in
+            guard let self else { return }
+            self.loadMissingDurations()
+            self.reloadEmptyMetadata()
+            if !UserDefaults.standard.bool(forKey: "setlistGroupingMigrationV1") {
+                self.loadMissingGroupings()
+            }
         }
+    }
+
+    func retryPersistence() {
+        guard hasUnsavedChanges else { load(); return }
+        do {
+            // Back up the unreadable file once; a failed write must not add another copy per retry.
+            if preserveSnapshot {
+                let backup = try store.backupSnapshot()
+                preserveSnapshot = false
+                recoveryNotice = "The previous setlist was saved as \(backup.lastPathComponent)."
+            }
+            try store.save(entries)
+            hasUnsavedChanges = false
+            persistenceError = nil
+        } catch {
+            persistenceError = "Couldn’t save the setlist. \(error.localizedDescription)"
+        }
+    }
+
+    /// Re-checks every entry's file off the main thread: `isReadableFile` on a sleeping
+    /// external drive blocks while it spins up. `completion` runs on main after the scan,
+    /// even when a newer scan supersedes this one's results.
+    func refreshMediaAvailability(completion: (@MainActor () -> Void)? = nil) {
+        let files = entries.map { ($0.id, $0.fileURL) }
+        mediaScanGeneration += 1
+        let generation = mediaScanGeneration
+        Task { @MainActor [weak self] in
+            let unreadable = await Self.unreadableFiles(files)
+            guard let self else { return }
+            if self.mediaScanGeneration == generation {
+                self.applyMediaScan(unreadable: unreadable)
+            }
+            completion?()
+        }
+    }
+
+    private static func unreadableFiles(_ files: [(UUID, URL)]) async -> Set<UUID> {
+        Set(files.filter { !FileManager.default.isReadableFile(atPath: $0.1.path) }.map(\.0))
+    }
+
+    private func applyMediaScan(unreadable: Set<UUID>) {
+        let ids = Set(entries.map(\.id))
+        playbackErrors = playbackErrors.filter { ids.contains($0.key) }
+        missingMediaIDs = unreadable.intersection(ids)
+        publishMediaIssues()
+    }
+
+    func markPlaybackFailure(id: UUID, reason: String) {
+        playbackErrors[id] = reason
+        setAutoGapApplied(id: id, applied: false)
+        if let entry = entries.first(where: { $0.id == id }), entry.state != .played {
+            markQueued(id: id)
+        }
+        publishMediaIssues()
+    }
+
+    func retryMedia(id: UUID) {
+        guard let url = entries.first(where: { $0.id == id })?.fileURL else { return }
+        playbackErrors[id] = nil
+        publishMediaIssues()
+        Task { @MainActor [weak self] in
+            let readable = await Self.unreadableFiles([(id, url)]).isEmpty
+            guard let self, self.entries.contains(where: { $0.id == id && $0.fileURL == url }) else { return }
+            if readable {
+                self.missingMediaIDs.remove(id)
+            } else {
+                self.missingMediaIDs.insert(id)
+            }
+            self.publishMediaIssues()
+            if readable {
+                self.reloadMetadata(ids: [id])
+                self.loadMissingDurations()
+            }
+        }
+    }
+
+    private func publishMediaIssues() {
+        let missing = Dictionary(uniqueKeysWithValues: missingMediaIDs.map {
+            ($0, "Audio file unavailable. Reconnect its drive or relink the track.")
+        })
+        mediaIssues = missing.merging(playbackErrors) { missing, _ in missing }
+    }
+
+    func relink(id: UUID, to url: URL) throws {
+        guard isAudioURL(url) else {
+            throw CocoaError(.fileReadUnknown, userInfo: [NSLocalizedDescriptionKey: "Choose a supported audio file."])
+        }
+        guard FileManager.default.isReadableFile(atPath: url.path) else {
+            throw CocoaError(.fileReadNoPermission)
+        }
+        let file = try AVAudioFile(forReading: url)
+        guard file.length > 0 else { throw CocoaError(.fileReadCorruptFile) }
+        guard let i = entries.firstIndex(where: { $0.id == id }) else { return }
+        if entries[i].fileURL != url { entries[i].musicPersistentID = nil }
+        entries[i].fileURL = url
+        entries[i].duration = Double(file.length) / file.fileFormat.sampleRate
+        playbackErrors[id] = nil
+        missingMediaIDs.remove(id)   // readability checked above
+        publishMediaIssues()
+        save()
+        Task { @MainActor [weak self] in await self?.reloadMetadata(id: id, force: true) }
     }
 
     /// Re-reads tags from disk for the given entries, replacing whatever is in the row.
@@ -382,10 +487,11 @@ final class SetlistManager: ObservableObject {
     /// `force` skips the empty-read guard: straight after our own tag write the volume is
     /// evidently awake, so an empty artist and genre is what the user asked for.
     @MainActor
-    func reloadMetadata(id: UUID, force: Bool = false) async {
-        guard let url = entries.first(where: { $0.id == id })?.fileURL else { return }
-        let track = await SetlistManager.readMetadata(from: url)
-        guard let i = entries.firstIndex(where: { $0.id == id }) else { return }
+    func reloadMetadata(id: UUID, force: Bool = false, editedFields: Set<String> = []) async {
+        guard let url = entries.first(where: { $0.id == id })?.fileURL,
+              !missingMediaIDs.contains(id) else { return }
+        let track = await SetlistManager.readMetadata(from: url, editedFields: editedFields)
+        guard let i = entries.firstIndex(where: { $0.id == id && $0.fileURL == url }) else { return }
         // A read off a still-sleeping volume comes back empty. Never let that
         // overwrite tags the row already has — a failed retry should change nothing.
         let old = entries[i].track
@@ -410,33 +516,40 @@ final class SetlistManager: ObservableObject {
     }
 
     private func loadMissingGroupings() {
-        let ids = entries.filter { $0.track.grouping == nil }.map { $0.id }
+        let missingGrouping = entries.filter { $0.track.grouping == nil }
+        let ids = missingGrouping.filter { !missingMediaIDs.contains($0.id) }.map(\.id)
         guard !ids.isEmpty else {
-            UserDefaults.standard.set(true, forKey: "setlistGroupingMigrationV1")
+            if missingGrouping.isEmpty {
+                UserDefaults.standard.set(true, forKey: "setlistGroupingMigrationV1")
+            }
             return
         }
         Task { @MainActor [weak self] in
             guard let self else { return }
+            var changed = false
             for id in ids {
                 guard let idx = self.entries.firstIndex(where: { $0.id == id }) else { continue }
                 let url  = self.entries[idx].fileURL
                 let meta = await SetlistManager.readMetadata(from: url)
                 guard let grouping = meta.grouping else { continue }
-                guard let i = self.entries.firstIndex(where: { $0.id == id }) else { continue }
+                guard let i = self.entries.firstIndex(where: { $0.id == id && $0.fileURL == url }) else { continue }
                 let old = self.entries[i].track
                 self.entries[i].track = Track(
                     title: old.title, artist: old.artist, genre: old.genre,
                     persistentID: old.persistentID, year: old.year,
                     comment: old.comment, albumArtist: old.albumArtist,
                     grouping: grouping, replayGainInfo: old.replayGainInfo)
+                changed = true
             }
-            UserDefaults.standard.set(true, forKey: "setlistGroupingMigrationV1")
-            self.save()
+            if self.missingMediaIDs.isEmpty {
+                UserDefaults.standard.set(true, forKey: "setlistGroupingMigrationV1")
+            }
+            if changed { self.save() }
         }
     }
 
     private func loadMissingDurations() {
-        let needsLoad = entries.filter { $0.duration == nil }.map { $0.id }
+        let needsLoad = entries.filter { $0.duration == nil && !missingMediaIDs.contains($0.id) }.map { $0.id }
         for id in needsLoad {
             Task {
                 guard let idx = self.entries.firstIndex(where: { $0.id == id }) else { return }
@@ -446,7 +559,7 @@ final class SetlistManager: ObservableObject {
                 let seconds = CMTimeGetSeconds(cmDuration)
                 guard seconds.isFinite && seconds > 0 else { return }
                 await MainActor.run {
-                    guard let i = self.entries.firstIndex(where: { $0.id == id }) else { return }
+                    guard let i = self.entries.firstIndex(where: { $0.id == id && $0.fileURL == url }) else { return }
                     self.entries[i].duration = seconds
                     self.save()
                 }
@@ -456,16 +569,9 @@ final class SetlistManager: ObservableObject {
 
     // MARK: - Metadata reading
 
-    static func readMetadata(from url: URL) async -> Track {
+    static func readMetadata(from url: URL, editedFields: Set<String> = []) async -> Track {
         let asset = AVURLAsset(url: url)
         let metadata = (try? await asset.load(.metadata)) ?? []
-
-        // Treat empty strings the same as missing: return nil so the ?? chain keeps searching.
-        func string(for id: AVMetadataIdentifier) async -> String? {
-            guard let item = AVMetadataItem.metadataItems(from: metadata, filteredByIdentifier: id).first else { return nil }
-            guard let val = try? await item.load(.stringValue), !val.isEmpty else { return nil }
-            return val
-        }
 
         // Raw-key scan for formats (FLAC/Vorbis) where AVFoundation has no typed identifier,
         // also catches stray tags where identifier mapping fails.
@@ -475,100 +581,14 @@ final class SetlistManager: ObservableObject {
             return val
         }
 
-        // Old iTunes (v4.x era) M4A files store itsk keys as packed NSNumber 4-char codes rather
-        // than NSString, so filteredByIdentifier misses them. Match by packed int32 value instead.
-        // Uses unicodeScalars (not utf8) so that multi-byte UTF-8 chars like © (U+00A9 = 0xA9)
-        // are treated as a single byte — matching the 4-char atom code convention.
-        func string(forITunesAtom atomCode: String) async -> String? {
-            let scalars = Array(atomCode.unicodeScalars)
-            guard scalars.count == 4 else { return nil }
-            let bytes = scalars.map { UInt8($0.value & 0xFF) }
-            let packed = Int32(bitPattern: (UInt32(bytes[0]) << 24) | (UInt32(bytes[1]) << 16) | (UInt32(bytes[2]) << 8) | UInt32(bytes[3]))
-            guard let item = metadata.first(where: { ($0.key as? NSNumber)?.int32Value == packed && $0.keySpace == .iTunes }) else { return nil }
-            guard let val = try? await item.load(.stringValue), !val.isEmpty else { return nil }
-            return val
-        }
-
-        // Skips Apple machine-generated COMM frames (iTunNORM, iTunSMPB, iTunPGAP, etc.) that
-        // store binary data as hex strings — AVFoundation returns all COMM frames and .first may
-        // land on one of these instead of the human-readable comment.
-        func humanReadableComment() async -> String? {
-            let items = AVMetadataItem.metadataItems(from: metadata, filteredByIdentifier: .id3MetadataComments)
-            for item in items {
-                let info = (try? await item.load(.extraAttributes))?[AVMetadataExtraAttributeKey.info] as? String ?? ""
-                guard !info.hasPrefix("iTun") else { continue }
-                if let val = try? await item.load(.stringValue), !val.isEmpty { return val }
-            }
-            return nil
-        }
-
-        // Resolves raw ID3 TCON values that encode genre as a number rather than text.
-        // Handles "(N)", "(N)Text", and plain "N" forms; passes real text through unchanged.
-        func resolveID3Genre(_ raw: String?) -> String? {
-            guard let raw, !raw.isEmpty else { return nil }
-            if raw.hasPrefix("("), let close = raw.firstIndex(of: ")") {
-                let numStr = String(raw[raw.index(after: raw.startIndex)..<close])
-                let text = String(raw[raw.index(after: close)...]).trimmingCharacters(in: .whitespaces)
-                if !text.isEmpty { return text }
-                if let n = Int(numStr), n >= 0, n < id3GenreNames.count { return id3GenreNames[n] }
-            }
-            if let n = Int(raw), n >= 0, n < id3GenreNames.count { return id3GenreNames[n] }
-            return raw
-        }
-
-        // M4A predefined genre: `gnre` atom stores an integer (ID3v1 index + 1).
-        // Music.app uses this when the user picks from its genre dropdown rather than typing.
-        func predefinedGenreName() async -> String? {
-            guard let item = AVMetadataItem.metadataItems(
-                from: metadata, filteredByIdentifier: .iTunesMetadataPredefinedGenre).first
-            else { return nil }
-            if let str = try? await item.load(.stringValue), !str.isEmpty { return str }
-            guard let n = (try? await item.load(.numberValue))?.intValue, n > 0, n <= id3GenreNames.count
-            else { return nil }
-            return id3GenreNames[n - 1]
-        }
-
-        let title = await string(for: .commonIdentifierTitle)
-            ?? url.deletingPathExtension().lastPathComponent
-        let artistFromAVF = await string(for: .commonIdentifierArtist)
-        let artist = artistFromAVF
-            ?? SetlistManager.iTunesLibrary[SetlistManager.iTunesMediaRelativeKey(url.path)]?.artist
-            ?? ""
-        // Genre: search across all common tagging conventions; falls back to iTunes Library.xml
-        // for tracks whose genre lives only in Music.app's library and was never embedded in the file.
-        // Empty values are treated as absent so a stale empty tag doesn't block the next lookup.
-        // (await cannot appear inside ?? autoclosures, so each lookup is a separate binding.)
-        let genreID3        = resolveID3Genre(await string(for: .id3MetadataContentType)) // MP3: TCON frame (resolved)
-        let genreiTunes     = await string(for: .iTunesMetadataUserGenre)                  // M4A: ©gen text atom
-        let genrePredefined = await predefinedGenreName()                                  // M4A: gnre integer atom (Music.app dropdown)
-        let genreVorbis     = await string(forRawKey: "genre")                             // FLAC/Vorbis comment
-        let genreRawTcon    = resolveID3Genre(await string(forRawKey: "tcon"))             // raw ID3 key fallback (resolved)
-        let genreEmbedded = genreID3 ?? genreiTunes ?? genrePredefined ?? genreVorbis ?? genreRawTcon
-        let genre = genreEmbedded
-            ?? SetlistManager.genreFromAudioToolbox(url)
-            ?? SetlistManager.iTunesLibrary[SetlistManager.iTunesMediaRelativeKey(url.path)]?.genre
-            ?? ""
-
-        let yearFromTYER    = (await string(for: .id3MetadataYear)).flatMap { Int($0) }
-        let yearFromiTunes  = (await string(for: .iTunesMetadataReleaseDate)).flatMap { Int(String($0.prefix(4))) }
-        let yearFromRawTdrc = (await string(forRawKey: "tdrc")).flatMap { Int(String($0.prefix(4))) }
-        let year: Int?      = yearFromTYER ?? yearFromiTunes ?? yearFromRawTdrc
-                           ?? SetlistManager.yearFromAudioToolbox(url)               // AIFF ID3v2.2 TYE frame
-                           ?? SetlistManager.iTunesLibrary[SetlistManager.iTunesMediaRelativeKey(url.path)]?.year
-        let commentFromID3    = await humanReadableComment()
-        let commentFromiTunes = await string(for: .iTunesMetadataUserComment)
-        let comment = commentFromID3 ?? commentFromiTunes
-        let albumArtistFromID3       = await string(for: .id3MetadataBand)
-        let albumArtistFromiTunes    = await string(for: .iTunesMetadataAlbumArtist)
-        let albumArtistOldiTunes     = await string(forITunesAtom: "aART") // old M4A: NSNumber key
-        let albumArtist = albumArtistFromID3 ?? albumArtistFromiTunes ?? albumArtistOldiTunes
-        let groupingFromID3       = await string(for: .id3MetadataContentGroupDescription) // MP3: TIT1
-        let groupingFromiTunes    = await string(for: .iTunesMetadataGrouping)             // modern M4A
-        let groupingOldiTunes     = await string(forITunesAtom: "©grp")                   // old M4A: NSNumber key
-        let groupingVorbis        = await string(forRawKey: "grouping")                    // FLAC/Vorbis
-        let groupingRawTit1       = await string(forRawKey: "tit1")                        // raw ID3 fallback
-        let grouping = groupingFromID3 ?? groupingFromiTunes ?? groupingOldiTunes ?? groupingVorbis ?? groupingRawTit1
-            ?? SetlistManager.iTunesLibrary[SetlistManager.iTunesMediaRelativeKey(url.path)]?.grouping
+        let tags = await EmbeddedTagReader.read(from: url, metadata: metadata)
+        let library = iTunesLibrary[iTunesMediaRelativeKey(url.path)]
+        let title = tags["TITLE"] ?? url.deletingPathExtension().lastPathComponent
+        // A verified clear takes precedence over cached Music metadata for that field.
+        let artist = tags["ARTIST"] ?? (editedFields.contains("ARTIST") ? nil : library?.artist) ?? ""
+        let genre = tags["GENRE"] ?? (editedFields.contains("GENRE") ? nil : library?.genre) ?? ""
+        let year = tags["DATE"].flatMap(Int.init) ?? (editedFields.contains("DATE") ? nil : library?.year)
+        let grouping = tags["GROUPING"] ?? (editedFields.contains("GROUPING") ? nil : library?.grouping)
 
         // ID3 TXXX frame lookup (MP3 ReplayGain). The description/tag-name lives in extraAttributes[.info].
         func txxx(key: String) async -> String? {
@@ -610,8 +630,8 @@ final class SetlistManager: ObservableObject {
             genre: genre,
             persistentID: url.absoluteString,
             year: year,
-            comment: comment,
-            albumArtist: albumArtist,
+            comment: tags["COMMENT"],
+            albumArtist: tags["ALBUMARTIST"],
             grouping: grouping,
             replayGainInfo: replayGainInfo
         )
@@ -726,76 +746,12 @@ final class SetlistManager: ObservableObject {
         return normalised
     }
 
-    private static func genreFromAudioToolbox(_ url: URL) -> String? {
-        var audioFile: AudioFileID?
-        guard AudioFileOpenURL(url as CFURL, .readPermission, 0, &audioFile) == noErr,
-              let af = audioFile else { return nil }
-        defer { AudioFileClose(af) }
-
-        var dataSize = UInt32(MemoryLayout<CFDictionary>.size)
-        var cfDictRef: Unmanaged<CFDictionary>? = nil
-        guard AudioFileGetProperty(af, kAudioFilePropertyInfoDictionary, &dataSize, &cfDictRef) == noErr,
-              let info = cfDictRef?.takeRetainedValue() as? [String: Any],
-              let genre = info[kAFInfoDictionary_Genre as String] as? String,
-              !genre.isEmpty else { return nil }
-        return genre
-    }
-
-    private static func yearFromAudioToolbox(_ url: URL) -> Int? {
-        var audioFile: AudioFileID?
-        guard AudioFileOpenURL(url as CFURL, .readPermission, 0, &audioFile) == noErr,
-              let af = audioFile else { return nil }
-        defer { AudioFileClose(af) }
-
-        var dataSize = UInt32(MemoryLayout<CFDictionary>.size)
-        var cfDictRef: Unmanaged<CFDictionary>? = nil
-        guard AudioFileGetProperty(af, kAudioFilePropertyInfoDictionary, &dataSize, &cfDictRef) == noErr,
-              let info = cfDictRef?.takeRetainedValue() as? [String: Any] else { return nil }
-        if let s = info[kAFInfoDictionary_Year as String] as? String, !s.isEmpty,
-           let y = Int(s.prefix(4)) { return y }
-        if let s = info[kAFInfoDictionary_RecordedDate as String] as? String, !s.isEmpty,
-           let y = Int(s.prefix(4)) { return y }
-        return nil
-    }
 }
 
 private func isAudioURL(_ url: URL) -> Bool {
     let ext = url.pathExtension.lowercased()
     return ["mp3", "m4a", "aiff", "aif", "wav", "flac", "caf", "opus"].contains(ext)
 }
-
-// Standard iTunes/ID3v1/Winamp genre list (192 entries).
-// The M4A `gnre` atom stores (index + 1), so gnre=114 → index 113 → "Tango".
-private let id3GenreNames: [String] = [
-    "Blues", "Classic Rock", "Country", "Dance", "Disco", "Funk", "Grunge",
-    "Hip-Hop", "Jazz", "Metal", "New Age", "Oldies", "Other", "Pop", "R&B",
-    "Rap", "Reggae", "Rock", "Techno", "Industrial", "Alternative", "Ska",
-    "Death Metal", "Pranks", "Soundtrack", "Euro-Techno", "Ambient", "Trip-Hop",
-    "Vocal", "Jazz+Funk", "Fusion", "Trance", "Classical", "Instrumental",
-    "Acid", "House", "Game", "Sound Clip", "Gospel", "Noise", "AlternRock",
-    "Bass", "Soul", "Punk", "Space", "Meditative", "Instrumental Pop",
-    "Instrumental Rock", "Ethnic", "Gothic", "Darkwave", "Techno-Industrial",
-    "Electronic", "Pop-Folk", "Eurodance", "Dream", "Southern Rock", "Comedy",
-    "Cult", "Gangsta", "Top 40", "Christian Rap", "Pop/Funk", "Jungle",
-    "Native American", "Cabaret", "New Wave", "Psychedelic", "Rave", "Showtunes",
-    "Trailer", "Lo-Fi", "Tribal", "Acid Punk", "Acid Jazz", "Polka", "Retro",
-    "Musical", "Rock & Roll", "Hard Rock",
-    // Winamp extensions (80+)
-    "Folk", "Folk-Rock", "National Folk", "Swing", "Fast Fusion", "Bebop",
-    "Latin", "Revival", "Celtic", "Bluegrass", "Avantgarde", "Gothic Rock",
-    "Progressive Rock", "Psychedelic Rock", "Symphonic Rock", "Slow Rock",
-    "Big Band", "Chorus", "Easy Listening", "Acoustic", "Humour", "Speech",
-    "Chanson", "Opera", "Chamber Music", "Sonata", "Symphony", "Booty Bass",
-    "Primus", "Porn Groove", "Satire", "Slow Jam", "Club",
-    "Tango",         // index 113
-    "Samba", "Folklore", "Ballad", "Power Ballad", "Rhythmic Soul", "Freestyle",
-    "Duet", "Punk Rock", "Drum Solo", "A Cappella", "Euro-House", "Dance Hall",
-    "Goa", "Drum & Bass", "Club-House", "Hardcore", "Terror", "Indie",
-    "BritPop", "Negerpunk", "Polsk Punk", "Beat", "Christian Gangsta Rap",
-    "Heavy Metal", "Black Metal", "Crossover", "Contemporary Christian",
-    "Christian Rock", "Merengue", "Salsa", "Thrash Metal", "Anime", "JPop",
-    "Synthpop",
-]
 
 private let trimLog = OSLog(subsystem: "com.tangodisplay", category: "musicdrop")
 

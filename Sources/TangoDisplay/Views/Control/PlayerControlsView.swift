@@ -5,6 +5,10 @@ struct PlayerControlsView: View {
     @EnvironmentObject var appState: AppState
     var onScrollToCurrentTrack: (() -> Void)? = nil
 
+    @State private var holdPauseArmed = false
+    @State private var holdPauseArmTask: Task<Void, Never>?
+    private static let holdPauseButtonWidth: CGFloat = 44
+
     var body: some View {
         VStack(spacing: 10) {
             HStack(alignment: .top, spacing: 12) {
@@ -22,6 +26,7 @@ struct PlayerControlsView: View {
             }
             .fixedSize(horizontal: false, vertical: true)
             volumeRow
+            SeekWaveformView(player: player)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
@@ -98,6 +103,8 @@ struct PlayerControlsView: View {
     private var transportButtons: some View {
         HStack(spacing: 10) {
             Spacer()
+            // Mirrors the pause button so the main button stays centred.
+            Color.clear.frame(width: Self.holdPauseButtonWidth, height: 1)
             Button {
                 switch appState.currentPlayerState {
                 case .playing, .pauseArmed: appState.transportPause()
@@ -117,8 +124,64 @@ struct PlayerControlsView: View {
                     .foregroundColor(color)
             }
             .buttonStyle(.plain)
+            holdPauseButton
             Spacer()
         }
+        .onChange(of: player.isActivePlaying) { playing in
+            if !playing { disarmHoldPause() }
+        }
+        .onDisappear { holdPauseArmTask?.cancel() }
+    }
+
+    // MARK: - Hold pause (pause in place, two presses to confirm)
+
+    private var holdPauseButton: some View {
+        let isHeld = player.isHeld
+        let enabled = appState.fadeMode == .none && (isHeld || player.isActivePlaying)
+        let (icon, color): (String, Color) = {
+            if isHeld          { return ("pause.circle.fill", .orange) }
+            if holdPauseArmed  { return ("pause.circle.fill", .red) }
+            return ("pause.circle", .secondary)
+        }()
+        return Button {
+            if isHeld {
+                appState.transportResumeHeld()
+            } else if holdPauseArmed {
+                disarmHoldPause()
+                appState.transportHoldPause()
+            } else {
+                armHoldPause()
+            }
+        } label: {
+            Image(systemName: icon)
+                .font(.system(size: 28))
+                .foregroundColor(color)
+                .scaleEffect(holdPauseArmed ? 1.12 : 1)
+                .animation(.easeInOut(duration: 0.15), value: holdPauseArmed)
+        }
+        .buttonStyle(.plain)
+        .frame(width: Self.holdPauseButtonWidth)
+        .disabled(!enabled)
+        .opacity(enabled ? 1 : 0.4)
+        .help(isHeld ? "Resume from paused position"
+              : holdPauseArmed ? "Click again to pause"
+              : "Pause in place (click twice)")
+    }
+
+    private func armHoldPause() {
+        holdPauseArmed = true
+        holdPauseArmTask?.cancel()
+        holdPauseArmTask = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(3))
+            guard !Task.isCancelled else { return }
+            holdPauseArmed = false
+        }
+    }
+
+    private func disarmHoldPause() {
+        holdPauseArmTask?.cancel()
+        holdPauseArmTask = nil
+        holdPauseArmed = false
     }
 
     private var volumeRow: some View {

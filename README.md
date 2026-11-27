@@ -67,10 +67,12 @@ cd TangoDisplay
 
 `Install.sh` requires Xcode Command Line Tools (`xcode-select --install`). It will:
 - Regenerate the app icon
-- Build a universal binary (arm64 + x86_64) using `swift build` and `lipo`
+- Build a universal binary (arm64 + x86_64) with a single multi-arch `swift build`
 - Assemble `TangoDisplay.app` with a correct `Info.plist`
 - Ad-hoc code-sign the bundle
 - Install to `/Applications` and launch the app
+
+`./Install.sh --build-only` stops after signing and leaves `TangoDisplay.app` in the repo root.
 
 ---
 
@@ -100,28 +102,38 @@ See the **[Wiki](https://github.com/richardsladetdj-creator/TangoDisplay/wiki)**
 
 ---
 
+## Silence & Gaps
+
+In **Settings › Player › Silence & Gaps**, turn on **Auto-gap** and set **Minimum gap**. Enable **Limit maximum gap** to also set **Maximum gap**. For a 2.5–3.5 second range, Auto-gap pads shorter transitions, preserves gaps within the range, and shortens detected silence at the track boundaries when a gap would exceed 3.5 seconds.
+
+The maximum applies to natural transitions in the built-in player. It works inside the selected track start and end times, and shortens the incoming lead-in before shortening the outgoing tail. If either edge cannot be measured in time, the player uses the minimum-gap behavior. The maximum is off by default.
+
 ## Building and Testing
 
+Use the Xcode Command Line Tools with Swift 5.9 or newer. SwiftPM resolves Sparkle and CXXTagLib from the checked-in `Package.resolved`.
+
 ```bash
-# Debug build
-swift build
-
-# Run all tests (39 tests, custom runner — no Xcode needed)
-swift run TangoDisplayTests
-
-# Full release build → /Applications (same as install)
-./Install.sh
+swift build --only-use-versions-from-resolved-file
+swift run --only-use-versions-from-resolved-file TangoDisplayTests
+bash Install.sh --build-only
+bash Scripts/SmokePackage.sh TangoDisplay.app .build/TangoDisplay-universal.zip
 ```
+
+The [macOS workflow](.github/workflows/macos.yml) repeats these checks on Apple Silicon and Intel. It verifies both architecture slices, the macOS deployment target, resources, signatures, and ZIP extraction. The bundle smoke command launches the executable without opening the desktop UI and runs the restoration DSP self-test.
+
+Before a release, open the verified ZIP on macOS 13 and a current macOS desktop. Start a built-in set with a dance track, a cortina, and a following tanda. Confirm track playback and the coming-up display, move the presentation window to a second monitor, then quit and reopen to check that the setlist is restored and playback waits for **Play**.
 
 ---
 
 ## Architecture
 
-The project has three SPM targets with no external dependencies:
+The package separates playback logic, native audio and tag bridges, and the SwiftUI app.
 
 | Target | Type | Purpose |
 |---|---|---|
 | `TangoDisplayCore` | Library | Pure logic — cortina detection, tanda tracking, models. No AppKit/SwiftUI. |
+| `TangoDisplayObjC` | Library | Native audio helpers, restoration DSP, and the CXXTagLib bridge. |
+| `TangoDisplayTagging` | Library | Shared embedded tag reader and verified file writes. |
 | `TangoDisplay` | Executable | SwiftUI app — UI, AppleScript bridge, polling, settings, window management |
 | `TangoDisplayTests` | Executable | Lightweight custom test runner (`swift run TangoDisplayTests`) |
 

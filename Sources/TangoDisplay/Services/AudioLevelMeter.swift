@@ -2,6 +2,7 @@ import Accelerate
 import AVFoundation
 import Foundation
 import os
+import TangoDisplayObjC
 
 final class AudioLevelMeter: ObservableObject {
 
@@ -26,8 +27,7 @@ final class AudioLevelMeter: ObservableObject {
     }
 
     func reinstallTap() {
-        mixerNode.removeTap(onBus: 0)
-        installTap()
+        installTap(replacing: true)
     }
 
     // MARK: - Private types
@@ -77,16 +77,20 @@ final class AudioLevelMeter: ObservableObject {
 
     // MARK: - Private
 
-    private func installTap() {
-        mixerNode.installTap(onBus: 0, bufferSize: 1024, format: nil) { [weak self] buffer, _ in
+    private func installTap(replacing: Bool = false) {
+        var reason: NSString?
+        let installed = TDTryInstallAudioMeterTap(mixerNode, replacing, { [weak self] buffer, _ in
             self?.processBuffer(buffer)
+        }, &reason)
+        if !installed {
+            os_log(.error, "TangoDisplay: audio meter tap unavailable: %{public}@", reason as String? ?? "Unknown error")
         }
     }
 
     private func processBuffer(_ buffer: AVAudioPCMBuffer) {
         guard let channelData = buffer.floatChannelData else { return }
         let frameCount = vDSP_Length(buffer.frameLength)
-        guard frameCount > 0 else { return }
+        guard frameCount > 0, buffer.format.channelCount > 0 else { return }
         let channelCount = Int(buffer.format.channelCount)
 
         var leftRMS: Float = 0

@@ -1,4 +1,5 @@
 import SwiftUI
+import TangoDisplayCore
 
 /// Editor to trim a setlist entry's playback to a [start, end] sub-range.
 /// Operates on `appState.trimEditorEntryID` (the right-clicked entry, which may be idle),

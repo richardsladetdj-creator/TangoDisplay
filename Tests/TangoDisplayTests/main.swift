@@ -71,6 +71,15 @@ func test(_ name: String, body: () throws -> Void) {
     }
 }
 
+func testAsync(_ name: String, body: () async throws -> Void) async {
+    do {
+        try await body()
+        test(name) {}
+    } catch {
+        test(name) { throw error }
+    }
+}
+
 // MARK: - CortinaDetector tests
 
 func runCortinaDetectorTests() {
@@ -1060,6 +1069,61 @@ func runPreparedAutoGapTests() {
             try expectEqual(q.injectedDuration(currentID: a, nextID: b, target: .infinity), 0)
         }
     }
+
+    suite("Optional maximum gap") {
+        func plan(trailing: Double, leading: Double, fixed: Double = 0,
+                  alreadyCut: Double = 0, maximum: Double? = 3.5) throws -> PreparedAutoGap.Adjustment {
+            let pair = PreparedAutoGap(currentID: a, nextID: b, trailing: trailing, leading: leading)
+            guard let adjustment = pair.adjustment(currentID: a, nextID: b, minimum: 2.5,
+                                                  maximum: maximum, protectedPadding: fixed,
+                                                  outgoingTrimApplied: alreadyCut) else {
+                throw TestFailure(message: "Expected a transition plan", file: #file, line: #line)
+            }
+            return adjustment
+        }
+
+        test("raises a 2-second gap to the 2.5-second minimum") {
+            let adjustment = try plan(trailing: 1, leading: 1)
+            try expectEqual(adjustment.padding, 0.5)
+            try expectEqual(adjustment.leadingTrim + adjustment.trailingTrim, 0)
+        }
+
+        test("leaves a 3-second gap intact") {
+            let adjustment = try plan(trailing: 1, leading: 2)
+            try expectEqual(adjustment.padding + adjustment.leadingTrim + adjustment.trailingTrim, 0)
+        }
+
+        test("shortens a 6-second gap by using incoming silence first") {
+            let adjustment = try plan(trailing: 2, leading: 4)
+            try expectEqual(adjustment.leadingTrim, 2.5)
+            try expectEqual(adjustment.trailingTrim, 0)
+        }
+
+        test("cuts the outgoing tail only when the incoming edge is too short") {
+            let adjustment = try plan(trailing: 5, leading: 1)
+            try expectEqual(adjustment.leadingTrim, 1)
+            try expectEqual(adjustment.trailingTrim, 1.5)
+            let incoming = try plan(trailing: 5, leading: 1, alreadyCut: 1.5)
+            try expectEqual(incoming.leadingTrim, 1)
+            try expectEqual(incoming.trailingTrim, 0)
+        }
+
+        test("counts fixed padding and flags padding that alone exceeds the maximum") {
+            let adjustment = try plan(trailing: 2, leading: 1, fixed: 1.5)
+            try expectEqual(adjustment.leadingTrim, 1)
+            try expect(!adjustment.paddingExceedsMaximum)
+            let conflict = try plan(trailing: 2, leading: 1, fixed: 4)
+            try expect(conflict.paddingExceedsMaximum)
+            try expectEqual(conflict.leadingTrim + conflict.trailingTrim, 0)
+        }
+
+        test("keeps minimum-only behavior with no valid maximum") {
+            for maximum in [nil, 2, .infinity] as [Double?] {
+                let adjustment = try plan(trailing: 2, leading: 4, maximum: maximum)
+                try expectEqual(adjustment.padding + adjustment.leadingTrim + adjustment.trailingTrim, 0)
+            }
+        }
+    }
 }
 
 // MARK: - Music start/stop → trim seconds
@@ -1153,11 +1217,43 @@ func runPlaylistIndexClampTests() {
     }
 }
 
+func runPlaybackProgressTests() {
+    suite("Playback progress") {
+        test("a node that never renders stalls after the grace period") {
+            var progress = PlaybackProgress(startedAt: 10, scheduledDuration: 120)
+            try expect(!progress.hasStalled(sampleTime: nil, now: 12.5))
+            try expect(progress.hasStalled(sampleTime: nil, now: 13))
+        }
+
+        test("rendering a silent gap still advances the sample clock") {
+            var progress = PlaybackProgress(startedAt: 10, scheduledDuration: 120)
+            for second in 11...16 {
+                try expect(!progress.hasStalled(sampleTime: Int64(second * 44100), now: Double(second)))
+            }
+        }
+
+        test("a stuck node is detected even while it still reports a sample time") {
+            var progress = PlaybackProgress(startedAt: 10, scheduledDuration: 120)
+            try expect(!progress.hasStalled(sampleTime: 100, now: 11))
+            try expect(!progress.hasStalled(sampleTime: 100, now: 13.5))
+            try expect(progress.hasStalled(sampleTime: 100, now: 14))
+        }
+
+        test("an early completion is distinguished from a normal track ending") {
+            let progress = PlaybackProgress(startedAt: 10, scheduledDuration: 120)
+            try expect(progress.endedPrematurely(now: 48))
+            try expect(!progress.endedPrematurely(now: 128))
+        }
+    }
+}
+
 // MARK: - Main entry point
 
 runMusicTrimTests()
 runPlaylistIndexClampTests()
 runPreparedAutoGapTests()
+runPlaybackProgressTests()
+runPlaybackRecoveryTests()
 runCortinaDetectorTests()
 runTandaTrackerTests()
 runProfileStoreTests()
@@ -1168,7 +1264,8 @@ runAudioUnitPluginTests()
 runRestorationTests()
 runSliderSnapTests()
 runUpcomingOverrideTests()
-runTagWriterTests()
+runTandaGroupingTests()
+await runTagWriterTests()
 
 print("\n════════════════════════════════")
 let icon = totalFailed == 0 ? "✓" : "✗"

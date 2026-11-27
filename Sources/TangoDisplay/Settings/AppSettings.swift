@@ -157,6 +157,25 @@ final class AppSettings: ObservableObject {
         didSet { UserDefaults.standard.set(autoGapDuration, forKey: kPrefix + "autoGapDuration") }
     }
 
+    @Published var autoGapMaximumEnabled: Bool {
+        didSet { UserDefaults.standard.set(autoGapMaximumEnabled, forKey: kPrefix + "autoGapMaximumEnabled") }
+    }
+
+    @Published var autoGapMaximumDuration: Double {
+        didSet { UserDefaults.standard.set(autoGapMaximumDuration, forKey: kPrefix + "autoGapMaximumDuration") }
+    }
+
+    var autoGapMaximum: Double? {
+        guard autoGapEnabled, autoGapMaximumEnabled else { return nil }
+        return effectiveAutoGapMaximumDuration
+    }
+
+    /// The maximum as the slider shows it: never below the minimum gap.
+    var effectiveAutoGapMaximumDuration: Double {
+        get { max(autoGapDuration, autoGapMaximumDuration) }
+        set { autoGapMaximumDuration = newValue }
+    }
+
     @Published var autoGapIgnoreFirstTrack: Bool {
         didSet { UserDefaults.standard.set(autoGapIgnoreFirstTrack, forKey: kPrefix + "autoGapIgnoreFirstTrack") }
     }
@@ -313,6 +332,10 @@ final class AppSettings: ObservableObject {
         didSet { UserDefaults.standard.set(hidePlayed, forKey: kPrefix + "hidePlayed") }
     }
 
+    @Published var groupByTanda: Bool {
+        didSet { UserDefaults.standard.set(groupByTanda, forKey: kPrefix + "groupByTanda") }
+    }
+
     // MARK: - Startup
 
     @Published var startupMode: StartupMode {
@@ -394,7 +417,11 @@ final class AppSettings: ObservableObject {
         let savedSeconds = ud.integer(forKey: kPrefix + "markAsPlayedAfterSeconds")
         markAsPlayedAfterSeconds = savedSeconds > 0 ? savedSeconds : 10
         autoGapEnabled = ud.object(forKey: kPrefix + "autoGapEnabled").flatMap { $0 as? Bool } ?? false
-        autoGapDuration = ud.object(forKey: kPrefix + "autoGapDuration").flatMap { $0 as? Double } ?? 4.0
+        let savedMinimum = ud.object(forKey: kPrefix + "autoGapDuration") as? Double ?? 4.0
+        autoGapDuration = savedMinimum.isFinite ? min(5, max(0.5, savedMinimum)) : 4.0
+        autoGapMaximumEnabled = ud.bool(forKey: kPrefix + "autoGapMaximumEnabled")
+        let savedMaximum = ud.double(forKey: kPrefix + "autoGapMaximumDuration")
+        autoGapMaximumDuration = savedMaximum.isFinite && savedMaximum >= 0.5 ? min(savedMaximum, 10) : 3.5
         autoGapIgnoreFirstTrack = ud.object(forKey: kPrefix + "autoGapIgnoreFirstTrack").flatMap { $0 as? Bool } ?? true
         autoGapSkipAfterManualStop = ud.object(forKey: kPrefix + "autoGapSkipAfterManualStop").flatMap { $0 as? Bool } ?? false
         autoFadeCortinasEnabled = ud.object(forKey: kPrefix + "autoFadeCortinasEnabled").flatMap { $0 as? Bool } ?? false
@@ -482,6 +509,7 @@ final class AppSettings: ObservableObject {
         decibelMeterLowThreshold  = ud.object(forKey: kPrefix + "decibelMeterLowThreshold").flatMap { $0 as? Int } ?? 60
         decibelMeterHighThreshold = ud.object(forKey: kPrefix + "decibelMeterHighThreshold").flatMap { $0 as? Int } ?? 80
         hidePlayed = ud.object(forKey: kPrefix + "hidePlayed").flatMap { $0 as? Bool } ?? false
+        groupByTanda = ud.object(forKey: kPrefix + "groupByTanda").flatMap { $0 as? Bool } ?? true
         let rawStartup = ud.string(forKey: kPrefix + "startupMode") ?? ""
         startupMode = StartupMode(rawValue: rawStartup) ?? .fullExperience
         hideLeftMenuBarOnStartup = ud.object(forKey: kPrefix + "hideLeftMenuBarOnStartup")

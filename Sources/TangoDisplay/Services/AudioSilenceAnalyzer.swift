@@ -28,6 +28,60 @@ actor AudioSilenceAnalyzer {
         cache.removeAll()
     }
 
+    enum Edge: Sendable { case leading, trailing }
+
+    /// A measured run of quiet frames ending at a window that contains sound.
+    /// A decode failure, cancellation, or an entirely quiet range cannot justify a cut.
+    func quietEdge(of url: URL, from start: Double?, to end: Double?, edge: Edge) -> Double? {
+        guard let file = try? AVAudioFile(forReading: url, commonFormat: .pcmFormatFloat32, interleaved: false)
+        else { return nil }
+        let rate = file.processingFormat.sampleRate
+        let total = file.length
+        guard rate.isFinite, rate > 0, total > 0,
+              let window = AVAudioFrameCount(exactly: max(1, (rate / 100).rounded(.down))),
+              window <= AVAudioFrameCount.max / 32,
+              let buffer = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: window * 32)
+        else { return nil }
+        let duration = Double(total) / rate
+        let firstSecond = max(0, start ?? 0)
+        let lastSecond = min(duration, end ?? duration)
+        guard firstSecond.isFinite, lastSecond.isFinite, firstSecond < lastSecond,
+              let first = AVAudioFramePosition(exactly: (firstSecond * rate).rounded(.down)),
+              let last = lastSecond == duration
+                ? total : AVAudioFramePosition(exactly: (lastSecond * rate).rounded(.down)),
+              last > first else { return nil }
+
+        // Roughly −55 dBFS. A window is quiet only if each channel stays below it.
+        let threshold: Float = 0.0017782794
+        var scanned: AVAudioFramePosition = 0
+        while scanned < last - first {
+            guard !Task.isCancelled else { return nil }
+            let count = AVAudioFrameCount(min(AVAudioFramePosition(buffer.frameCapacity), last - first - scanned))
+            file.framePosition = edge == .leading ? first + scanned : last - scanned - AVAudioFramePosition(count)
+            buffer.frameLength = 0
+            guard (try? file.read(into: buffer, frameCount: count)) != nil,
+                  buffer.frameLength == count, let channels = buffer.floatChannelData else { return nil }
+
+            var examined = 0
+            while examined < Int(count) {
+                let width = min(Int(window), Int(count) - examined)
+                let index = edge == .leading ? examined : Int(count) - examined - width
+                for channel in 0..<Int(buffer.format.channelCount) {
+                    if (index..<(index + width)).contains(where: {
+                        let sample = channels[channel][$0]
+                        return !sample.isFinite || abs(sample) > threshold
+                    }) {
+                        // Keep the entire first window that contains sound, including the attack.
+                        return Double(scanned + AVAudioFramePosition(examined)) / rate
+                    }
+                }
+                examined += width
+            }
+            scanned += AVAudioFramePosition(count)
+        }
+        return nil
+    }
+
     // MARK: - Private
 
     private static let overviewRate: Double = 100.0   // samples per second

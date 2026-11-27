@@ -1,69 +1,104 @@
-import AVFoundation
 import Foundation
-import TangoDisplayCore
 import TangoDisplayObjC
+import TangoDisplayTagging
 
-// Proves TagLib linked, and that what it writes is what AVFoundation — and so
-// SetlistManager.readMetadata — reads back. AIFF exercises the ID3v2 path (incl. the
-// GROUPING → TIT1 mirror), M4A the MP4 atom path.
-func runTagWriterTests() {
-    suite("Tag writer (TagLib)") {
-        for ext in ["aiff", "m4a"] {
-            test("\(ext): written tags read back through AVFoundation") {
-                let url = try makeSilentFile(ext: ext)
-                defer { try? FileManager.default.removeItem(at: url) }
-
-                var err: NSString?
-                let ok = TDWriteTags(url.path, ["TITLE": "Poema", "ARTIST": "Francisco Canaro",
-                                                "GENRE": "Tango", "GROUPING": "Roberto Maida"], &err)
-                try expect(ok, "write failed: \(err ?? "")")
-
-                let items = AVURLAsset(url: url).metadata
-                func value(_ id: AVMetadataIdentifier) -> String? {
-                    AVMetadataItem.metadataItems(from: items, filteredByIdentifier: id).first?.stringValue
-                }
-                let common = { (key: AVMetadataKey) in
-                    AVMetadataItem.metadataItems(from: items, withKey: key, keySpace: .common).first?.stringValue
-                }
-                try expectEqual(common(.commonKeyTitle), "Poema")
-                try expectEqual(common(.commonKeyArtist), "Francisco Canaro")
-                let grouping = ext == "m4a" ? groupingAtom(items)?.stringValue
-                                            : value(.id3MetadataContentGroupDescription)
-                try expectEqual(grouping, "Roberto Maida")
-
-                // Empty value removes the field; untouched keys survive.
-                try expect(TDWriteTags(url.path, ["GROUPING": ""], &err))
-                let after = AVURLAsset(url: url).metadata
-                try expect(AVMetadataItem.metadataItems(from: after, withKey: AVMetadataKey.commonKeyTitle,
-                                                        keySpace: .common).first?.stringValue == "Poema")
-                let gone = ext == "m4a" ? groupingAtom(after) == nil
-                    : AVMetadataItem.metadataItems(from: after, filteredByIdentifier: .id3MetadataContentGroupDescription).isEmpty
-                try expect(gone, "grouping not removed")
+func runTagWriterTests() async {
+    suite("Tag editing and disk verification") {}
+    for ext in ["aiff", "aif", "m4a", "mp3", "wav", "flac", "opus"] {
+        await testAsync("\(ext): supported fields round-trip and clear through the setlist reader") {
+            let url = try copyTagFixture(ext)
+            defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+            let changes = [
+                "TITLE": "Poema", "ARTIST": "Francisco Canaro", "GENRE": "Tango", "DATE": "1935",
+                "GROUPING": "Roberto Maida", "ALBUMARTIST": "Orquesta", "COMMENT": "Original recording",
+            ]
+            let result = try TagFileWriter.write(changes, to: url)
+            try expect(result.issues.isEmpty, "Unexpected field errors: \(result.issues)")
+            try expectEqual(result.written, Set(changes.keys))
+            let written = await EmbeddedTagReader.read(from: url)
+            for (key, expected) in changes {
+                try expectEqual(written[key], expected)
             }
+
+            let keysToClear = ["GROUPING", "COMMENT", "ALBUMARTIST", "DATE"]
+            let cleared = try TagFileWriter.write(Dictionary(uniqueKeysWithValues: keysToClear.map { ($0, "") }), to: url)
+            try expect(cleared.issues.isEmpty, "Unexpected clear errors: \(cleared.issues)")
+            let after = await EmbeddedTagReader.read(from: url)
+            for key in keysToClear { try expectNil(after[key]) }
+            try expectEqual(after["TITLE"], changes["TITLE"])
+            try expectEqual(after["ARTIST"], changes["ARTIST"])
         }
+    }
+
+    test("unverified fields are reported and valid fields are saved") {
+        let url = try copyTagFixture("m4a")
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        let unsupported = "TRACKNUMBER"
+        let result = try TagFileWriter.write(["TITLE": "Poema", "DATE": "not a year", unsupported: "not a track number"], to: url)
+        try expectNotNil(result.issues["DATE"])
+        try expectNotNil(result.issues[unsupported])
+        try expectEqual(result.written, ["TITLE"])
+        let written = TDReadTags(url.path)
+        try expectEqual(written?["TITLE"], "Poema")
+        try expectNil(written?["DATE"])
+        try expectNil(written?[unsupported])
+    }
+
+    await testAsync("ID3 grouping edits preserve a distinct work title") {
+        let url = try copyTagFixture("mp3")
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        let initial = try TagFileWriter.write(["WORK": "Independent Work"], to: url)
+        try expectEqual(initial.written, ["WORK"])
+
+        let update = try TagFileWriter.write(["GROUPING": "New Grouping"], to: url)
+        try expectEqual(update.written, ["GROUPING"])
+        try expectEqual(TDReadTags(url.path)?["WORK"], "Independent Work")
+        let displayed = await EmbeddedTagReader.read(from: url)
+        try expectEqual(displayed["GROUPING"], "New Grouping")
+
+        let clear = try TagFileWriter.write(["GROUPING": ""], to: url)
+        try expect(clear.written.isEmpty)
+        try expectNotNil(clear.issues["GROUPING"])
+        try expectEqual(TDReadTags(url.path)?["WORK"], "Independent Work")
+        try expectEqual(TDReadTags(url.path)?["GROUPING"], "New Grouping")
+    }
+
+    test("failed replacement keeps the original bytes and cleans up the staging file") {
+        let url = try copyTagFixture("aiff")
+        let directory = url.deletingLastPathComponent()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let original = try Data(contentsOf: url)
+        var reachedReplacement = false
+        do {
+            _ = try TagFileWriter.write(["TITLE": "Poema"], to: url) { candidate, destination in
+                reachedReplacement = true
+                try expectEqual(destination, url.resolvingSymlinksInPath())
+                try expectEqual(TDReadTags(candidate.path)?["TITLE"], "Poema")
+                throw CocoaError(.fileWriteNoPermission)
+            }
+            try expect(false, "Expected replacement to fail")
+        } catch CocoaError.fileWriteNoPermission {
+            try expect(reachedReplacement)
+        }
+        try expectEqual(Data(contentsOf: url), original)
+        try expectEqual(FileManager.default.contentsOfDirectory(atPath: directory.path), [url.lastPathComponent])
     }
 }
 
-// TagLib writes ©grp the way old iTunes did — AVFoundation surfaces it under a packed
-// NSNumber key, not .iTunesMetadataGrouping. readMetadata's string(forITunesAtom:) covers it.
-private func groupingAtom(_ items: [AVMetadataItem]) -> AVMetadataItem? {
-    items.first { ($0.key as? NSNumber)?.uint32Value == 0xA9_67_72_70 && $0.keySpace == .iTunes }
-        ?? AVMetadataItem.metadataItems(from: items, filteredByIdentifier: .iTunesMetadataGrouping).first
-}
-
-private func makeSilentFile(ext: String) throws -> URL {
-    let url = FileManager.default.temporaryDirectory
-        .appendingPathComponent("tagwriter-\(UUID().uuidString).\(ext)")
-    let settings: [String: Any] = ext == "m4a"
-        ? [AVFormatIDKey: kAudioFormatMPEG4AAC, AVSampleRateKey: 44100, AVNumberOfChannelsKey: 2]
-        : [AVFormatIDKey: kAudioFormatLinearPCM, AVSampleRateKey: 44100, AVNumberOfChannelsKey: 2,
-           AVLinearPCMBitDepthKey: 16, AVLinearPCMIsBigEndianKey: true, AVLinearPCMIsFloatKey: false]
-    let format = AVAudioFormat(standardFormatWithSampleRate: 44100, channels: 2)!
-    let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 44100)!
-    buffer.frameLength = 44100
+private func copyTagFixture(_ ext: String) throws -> URL {
+    let sourceExtension = ext == "aif" ? "aiff" : ext
+    guard let source = Bundle.module.url(forResource: "silence", withExtension: sourceExtension,
+                                         subdirectory: "TagFixtures") else {
+        throw CocoaError(.fileNoSuchFile)
+    }
+    let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    let file = directory.appendingPathComponent("track.\(ext)")
     do {
-        let file = try AVAudioFile(forWriting: url, settings: settings)
-        try file.write(from: buffer)
-    }   // file closes when it goes out of scope
-    return url
+        try FileManager.default.copyItem(at: source, to: file)
+        return file
+    } catch {
+        try? FileManager.default.removeItem(at: directory)
+        throw error
+    }
 }

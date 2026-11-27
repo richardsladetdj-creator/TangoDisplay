@@ -284,6 +284,7 @@ final class AppState: ObservableObject {
         guard settings.autoFadeCortinasEnabled,
               displayState.mode == .cortina,
               let player = localPlayer,
+              !player.isHeld,
               autoFadeTask == nil else { return }
         if setlist.entries.first(where: { $0.id == player.currentEntryID })?.ignoresAutoFade == true { return }
         let dur = player.duration > 0 ? player.duration
@@ -656,7 +657,10 @@ final class AppState: ObservableObject {
 
     // MARK: - Transport passthrough (built-in player only)
 
-    func transportPlay()  { activeSource.play() }
+    func transportPlay() {
+        if localPlayer?.isHeld == true { transportResumeHeld(); return }
+        activeSource.play()
+    }
 
     func transportPause() {
         switch currentPlayerState {
@@ -678,10 +682,32 @@ final class AppState: ObservableObject {
         }
     }
 
+    /// Pause in place (keeps position). Confirmation is handled by the caller's two-press UI.
+    func transportHoldPause() {
+        guard fadeMode == .none, let player = localPlayer else { return }
+        cancelPauseArm()
+        cancelAutoFade()
+        player.holdPause()
+    }
+
+    func transportResumeHeld() {
+        guard let player = localPlayer, player.isHeld else { return }
+        player.resumeHeld()
+        // Cortina auto-fade was cancelled at hold — re-time it from the held position.
+        rescheduleAutoFadeIfNeeded()
+    }
+
     func transportStop()           { cancelFade(); localPlayer?.stopTrack() }
     func transportSkipNext()       { cancelFade(); cancelPauseArm(); activeSource.skipNextImmediate() }
     func transportSkipPrevious()   { cancelFade(); cancelPauseArm(); activeSource.skipPrevious() }
-    func transportSeek(to s: Double) { activeSource.seek(to: s) }
+    func transportSeek(to s: Double) {
+        activeSource.seek(to: s)
+        // Pending cortina auto-fade was timed from the old position — re-time it.
+        if autoFadeTask != nil {
+            cancelAutoFade()
+            rescheduleAutoFadeIfNeeded()
+        }
+    }
 
     func transportFadeAndStop() {
         if fadeMode == .fadeAndStop { cancelFade(); rescheduleAutoFadeIfNeeded(); return }

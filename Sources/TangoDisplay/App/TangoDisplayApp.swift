@@ -1,6 +1,26 @@
 import SwiftUI
+import TangoDisplayObjC
 
 @main
+enum TangoDisplayMain {
+    @MainActor
+    static func main() {
+        if CommandLine.arguments.dropFirst().elementsEqual(["--bundle-smoke-test"]) {
+            let bundle = Bundle.main
+            guard bundle.bundleIdentifier == "com.local.tangodisplay",
+                  bundle.url(forResource: "SetlistLogo", withExtension: "png") != nil,
+                  bundle.url(forResource: "index", withExtension: "html", subdirectory: "RemoteUI") != nil,
+                  TDRestorationSelfTest() == 0 else {
+                fputs("TangoDisplay bundle smoke test failed\n", stderr)
+                exit(EXIT_FAILURE)
+            }
+            print("TangoDisplay bundle smoke test passed")
+            return
+        }
+        TangoDisplayApp.main()
+    }
+}
+
 struct TangoDisplayApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @StateObject private var appState = AppState()
@@ -54,15 +74,6 @@ struct TangoDisplayApp: App {
                 .preferredColorScheme(.dark)
         }
         .defaultSize(width: 580, height: 530)
-
-        // Waveform window — shows amplitude waveform for the currently playing track
-        Window("Waveform", id: "waveform") {
-            WaveformWindowContent()
-                .environmentObject(appState)
-                .environmentObject(appState.settings)
-                .preferredColorScheme(.dark)
-        }
-        .defaultSize(width: 700, height: 80)
 
         // Track start & end time editor — trims playback to a sub-range (built-in player only)
         Window("Track start & end time", id: "trackTiming") {

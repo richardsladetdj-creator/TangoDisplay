@@ -1,12 +1,15 @@
 #!/usr/bin/env bash
 # TangoDisplay — Build, bundle, sign, and install to /Applications
-# Usage: ./Install.sh
+# Usage: ./Install.sh [--build-only]
+#   --build-only  build and sign TangoDisplay.app in the repo root; don't install or launch (CI)
 # Requirements: Xcode Command Line Tools (xcode-select --install)
 set -euo pipefail
 
 APP_NAME="TangoDisplay"
 BUNDLE_ID="com.local.tangodisplay"
 ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
+BUILD_ONLY=false
+[[ "${1:-}" == "--build-only" ]] && BUILD_ONLY=true
 
 cd "$ROOT_DIR"
 
@@ -16,18 +19,21 @@ iconutil -c icns icon.iconset -o icon.icns
 rm -rf icon.iconset
 
 echo "== Build (Release, universal) =="
-swift build -c release --triple arm64-apple-macosx13.0
-swift build -c release --triple x86_64-apple-macosx13.0
-lipo -create \
-  ".build/arm64-apple-macosx/release/$APP_NAME" \
-  ".build/x86_64-apple-macosx/release/$APP_NAME" \
-  -output ".build/$APP_NAME-universal"
-
-BIN_PATH=".build/$APP_NAME-universal"
+# One multi-arch build: SwiftPM's swiftbuild backend (default since Swift 6.x) writes every
+# --triple into the same Products directory, so two per-arch builds overwrite each other.
+UNIVERSAL=(-c release --arch arm64 --arch x86_64)
+swift build --only-use-versions-from-resolved-file "${UNIVERSAL[@]}"
+BIN_PATH="$(swift build --show-bin-path "${UNIVERSAL[@]}")/$APP_NAME"
 if [[ ! -f "$BIN_PATH" ]]; then
   echo "ERROR: Expected binary at $BIN_PATH"
   exit 1
 fi
+for arch in arm64 x86_64; do
+  if ! lipo "$BIN_PATH" -verify_arch "$arch"; then
+    echo "ERROR: $BIN_PATH is missing the $arch slice"
+    exit 1
+  fi
+done
 
 APP_DIR="$ROOT_DIR/$APP_NAME.app"
 CONTENTS="$APP_DIR/Contents"
@@ -70,9 +76,9 @@ cat > "$CONTENTS/Info.plist" <<EOF
   <key>CFBundleIconFile</key>
   <string>icon</string>
   <key>CFBundleVersion</key>
-  <string>114</string>
+  <string>115</string>
   <key>CFBundleShortVersionString</key>
-  <string>4.0.1</string>
+  <string>4.1.0</string>
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>LSMinimumSystemVersion</key>
@@ -122,6 +128,11 @@ cp -R "$SPARKLE_FW" "$CONTENTS/Frameworks/"
 echo "== Codesign (ad-hoc) =="
 codesign --force --deep --sign - "$CONTENTS/Frameworks/Sparkle.framework" || true
 codesign --force --deep --sign - "$APP_DIR" || true
+
+if "$BUILD_ONLY"; then
+  echo "Built: $APP_DIR"
+  exit 0
+fi
 
 echo "== Install to /Applications =="
 DEST="/Applications/$APP_NAME.app"

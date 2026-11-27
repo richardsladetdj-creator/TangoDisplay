@@ -6,7 +6,7 @@
 
 # Built app bundle and release zips (distributed via GitHub Releases)
 TangoDisplay.app/
-TangoDisplay-v*.zip
+*.zip
 
 # macOS metadata
 .DS_Store
@@ -16,3 +16,6 @@ TangoDisplay-v*.zip
 # Temp / editor
 *.swp
 *~
+
+# Local planning notes
+*plan.md

@@ -424,17 +424,18 @@ You can adjust the duration while a track is playing. The new value takes effect
 
 ---
 
-## Waveform Window
+## Waveform Seek Bar
 
-Click the **Waveform button** (waveform path icon) in the Setlist toolbar to open a compact floating window showing the audio waveform of the current or upcoming track.
+Below the volume slider, the player panel shows the audio waveform of the current track. It replaces the separate Waveform window from earlier versions.
 
-The window displays:
+- **Waveform bars** — amplitude across the full track. Bars before the playhead use the accent colour (orange while paused); bars after it are dimmed.
+- **Playhead** — moves in real time; elapsed time on the left, remaining time on the right.
+- **Markers** — an accent line where the track will be marked as played (when *mark as played after N seconds* is on), and an orange line where a cortina's auto-fade starts.
+- **Trimmed regions** — parts outside the track's start & end time are shaded.
 
-- **Waveform bars** — amplitude of the audio across the full track duration. Bars before the playhead are shown in the accent colour; bars after the playhead are dimmed.
-- **Playhead** — a red line that moves in real time to show elapsed position.
-- **Elapsed / total time** — shown at the left and right of the waveform.
+**Seeking is two-step to avoid accidental jumps:** click the bar once to select it (yellow border, lock icon opens), then click or drag to move playback. It locks again after 6 seconds idle, on track change, or when you click the lock icon. Seeking is disabled while a fade is running.
 
-Waveform data is computed from the audio file on demand and cached so subsequent plays load instantly. The button is enabled whenever tracks are loaded in the setlist.
+Waveform data is computed from the audio file on demand and cached so subsequent plays load instantly.
 
 ---
 
